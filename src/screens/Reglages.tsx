@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { Compteur, toast } from '../ui';
 import { demanderPersistance, type Sauvegarde } from '../db';
+import Suggestions from '../Suggestions';
 
 export default function Reglages() {
   const { reglages, modifierReglages, recettes, planning, importer } = useStore();
@@ -30,6 +31,8 @@ export default function Reglages() {
   return (
     <div className="page">
       <h1 style={{ marginBottom: 16 }}>Réglages</h1>
+
+      <Suggestions />
 
       <div className="carte">
         <label className="champ" style={{ marginBottom: 0 }}><span>Nom de l’appli</span><input type="text" value={reglages.nomAppli} onChange={e => modifierReglages({ nomAppli: e.target.value })} /></label>
