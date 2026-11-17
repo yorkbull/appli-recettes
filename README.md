@@ -13,6 +13,12 @@ et, dans les phases suivantes, générer la liste de courses.
   lecture du texte d'une photo de recette (Tesseract, chargé à la demande) qui remplit les champs
 - Courses (onglet du menu) : ingrédients de la semaine additionnés et ajustés aux portions, rangés en
   Fruits / Légumes / Viande et poisson / Autres, cases à cocher, export « Partager » ou « Copier » vers une note
+- Import depuis un lien (`src/lib/lien.ts`) : données schema.org « Recipe » de la page (titre, photo, portions, temps,
+  ingrédients, étapes), page récupérée via le relais public r.jina.ai (repli : allorigins, corsproxy), photo via wsrv.nl.
+  Un lien partagé depuis Chrome vers l'appli est importé automatiquement.
+- Lecture de photo (`src/lib/ocr.ts`, `src/lib/fiche-photo.ts`) : Tesseract en mode « texte épars », mise en page
+  refaite à partir de la position des mots (lignes, colonnes, bandes, paragraphes), puis chaque bloc reçoit un rôle
+  (titre, ingrédients, étapes, ignorer) selon le plan d'une fiche recette ; l'utilisateur peut corriger avant de remplir.
 - Réglages : nom, thématiques, portions par défaut, export / restauration
 - Données stockées sur le téléphone (IndexedDB), fonctionne hors ligne
 

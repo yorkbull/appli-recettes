@@ -1,9 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { nouvelId, useStore } from '../store';
 import { MOMENTS, MOMENT_LABEL, type Moment, type Recette } from '../types';
 import { compresserPhoto } from '../lib/photo';
 import { lireTexteColle } from '../lib/texte-colle';
-import { lireTexteImage } from '../lib/ocr';
+import { lirePhoto as lireTexteImagePara } from '../lib/ocr';
+import { analyser, assembler, ROLES, type Bloc, type Infos } from '../lib/fiche-photo';
+import { lireLien } from '../lib/lien';
 import { Compteur, Feuille, Icone, toast } from '../ui';
 
 const lignes = (s: string) => s.split('\n').map(l => l.trim()).filter(Boolean);
@@ -38,20 +40,78 @@ export default function Editer({ id }: { id: string }) {
     setPhotoEnCours(false);
   };
 
-  // Lit le texte de la photo puis l'ouvre dans « Coller une recette » pour relecture avant de remplir les champs
+  // Lit la photo, découpe le texte en blocs (titre, ingrédients, étapes…) et ouvre le tri pour vérification.
+  // Plusieurs photos s'ajoutent (recette sur deux pages).
+  const [tri, setTri] = useState<{ blocs: Bloc[]; infos: Infos } | null>(null);
   const lirePhoto = async (f?: Blob | null) => {
     if (!f || lecture !== null) return;
     setLecture(0);
     try {
-      const t = await lireTexteImage(f, setLecture);
-      if (!t.trim()) toast('Aucun texte trouvé sur cette photo');
-      else { setTexte(t.trim()); setColler(true); }
+      const paragraphes = await lireTexteImagePara(f, setLecture);
+      const depart = tri ? Math.max(0, ...tri.blocs.map(b => b.id)) + 1 : 0;
+      const r = analyser(paragraphes, depart);
+      if (!r.blocs.length) toast('Aucun texte lisible sur cette photo : photographiez la page bien à plat, nette et éclairée');
+      else setTri(t => t ? { blocs: [...t.blocs, ...r.blocs], infos: { ...r.infos, ...t.infos } } : r);
     } catch {
       toast(navigator.onLine ? 'La lecture de la photo a échoué' : 'La première lecture de photo demande une connexion internet');
     }
     setLecture(null);
   };
   const enLecture = lecture !== null ? `Lecture du texte… ${Math.round(lecture * 100)} %` : null;
+
+  const appliquerTri = () => {
+    if (!tri) return;
+    const r = assembler(tri.blocs);
+    if (r.titre) setTitre(r.titre);
+    if (tri.infos.portions) setPortions(tri.infos.portions);
+    if (tri.infos.preparationMin) setPrep(String(tri.infos.preparationMin));
+    if (tri.infos.cuissonMin) setCuisson(String(tri.infos.cuissonMin));
+    if (r.ingredients.length) setIngredients(r.ingredients.join('\n'));
+    if (r.etapes.length) setEtapes(r.etapes.join('\n\n'));
+    setTri(null);
+    toast(`${r.ingredients.length} ingrédients et ${r.etapes.length} étapes repris : relisez avant d’enregistrer`);
+  };
+
+  // Import depuis un lien : on remplit tous les champs avec ce que le site décrit
+  const [adresse, setAdresse] = useState(partage?.lien ?? '');
+  const [importEnCours, setImportEnCours] = useState(false);
+  const importer = async (u = adresse) => {
+    let url: string;
+    try { url = new URL(u.trim()).toString(); } catch { toast('Collez l’adresse complète de la page (https://…)'); return; }
+    setImportEnCours(true);
+    try {
+      const r = await lireLien(url);
+      if (r.titre) setTitre(r.titre);
+      if (r.portions) setPortions(r.portions);
+      setPrep(r.preparationMin ? String(r.preparationMin) : '');
+      setCuisson(r.cuissonMin ? String(r.cuissonMin) : '');
+      setIngredients(r.ingredients.join('\n'));
+      setEtapes(r.etapes.join('\n\n'));
+      setLien(url);
+      // thématiques et moments déduits des catégories du site, quand elles correspondent
+      const cats = r.categories.map(c => c.toLowerCase());
+      const t = reglages.thematiques.filter(th => cats.some(c => c.includes(th.toLowerCase())) || (th === 'Végétarien' && cats.some(c => c.includes('végé'))));
+      if (t.length) setThemes(x => [...new Set([...x, ...t])]);
+      if (cats.some(c => /petit[- ]d[ée]jeuner|brunch/.test(c))) setMoments(m => m.length ? m : ['matin']);
+      if (r.photo) {
+        try {
+          const img = await fetch(`https://wsrv.nl/?url=${encodeURIComponent(r.photo)}&w=1200&output=jpg`);
+          if (img.ok) setPhoto(await compresserPhoto(await img.blob()));
+        } catch { /* recette importée sans photo */ }
+      }
+      toast(`Recette importée : ${r.ingredients.length} ingrédients, ${r.etapes.length} étapes. Relisez avant d’enregistrer`);
+    } catch (e) {
+      toast(!navigator.onLine ? 'Pas de connexion internet'
+        : (e as Error).message === 'pas de recette' ? 'Pas de recette reconnue sur cette page : copiez son texte et utilisez « Coller »'
+        : 'La page n’a pas pu être lue, réessayez dans un instant');
+    }
+    setImportEnCours(false);
+  };
+  // lien reçu par « Partager » depuis Chrome : import automatique
+  const dejaImporte = useRef(false);
+  useEffect(() => {
+    if (partage?.lien && !dejaImporte.current) { dejaImporte.current = true; importer(partage.lien); }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const appliquerTexte = () => {
     const r = lireTexteColle(texte);
@@ -95,17 +155,21 @@ export default function Editer({ id }: { id: string }) {
 
       {!existante && (
         <div className="carte">
-          <p style={{ marginTop: 0 }}><b>Gagner du temps</b><br /><span className="doux petit">Photographiez une recette (livre, fiche, capture d’écran) ou collez son texte : l’appli remplit les champs.</span></p>
+          <p style={{ marginTop: 0 }}><b>Gagner du temps</b><br /><span className="doux petit">Donnez le lien d’une recette, photographiez-la (livre, fiche) ou collez son texte : l’appli remplit la fiche.</span></p>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <input type="url" inputMode="url" placeholder="Lien de la recette (https://…)" value={adresse} onChange={e => setAdresse(e.target.value)} aria-label="Lien de la recette" />
+            <button className="btn principal" disabled={!adresse.trim() || importEnCours} onClick={() => importer()}>{importEnCours ? '…' : 'Importer'}</button>
+          </div>
+          {importEnCours && <p className="doux petit" role="status" style={{ marginTop: 0 }}>Lecture de la page…</p>}
           <label className="btn plein" style={{ position: 'relative', marginBottom: 8 }} aria-busy={lecture !== null}>
             {enLecture ?? 'Lire une recette sur une photo'}
             <input type="file" accept="image/*" disabled={lecture !== null} style={{ position: 'absolute', inset: 0, opacity: 0 }} aria-label="Lire une recette sur une photo"
               onChange={e => { lirePhoto(e.target.files?.[0]); e.target.value = ''; }} />
           </label>
           <button className="btn plein" onClick={() => setColler(true)}>Coller le texte d’une recette</button>
-          <p className="doux petit" style={{ marginBottom: 0 }}>Photo bien droite, nette et éclairée : la lecture est meilleure. La première fois, l’appli télécharge le lecteur de texte (quelques Mo). L’import depuis un lien arrive en phase 4.</p>
+          <p className="doux petit" style={{ marginBottom: 0 }}>Photo : page bien à plat, prise de face, nette et éclairée, sans ombre ; une photo par page si la recette en a deux. La première fois, l’appli télécharge le lecteur de texte (quelques Mo).</p>
         </div>
       )}
-      {partage?.lien && !existante && <p className="carte petit">Lien reçu : <a href={partage.lien} target="_blank" rel="noreferrer">{partage.lien}</a><br /><span className="doux">Ouvrez-le, copiez le texte de la recette et collez-le ci-dessus.</span></p>}
 
       <label className="champ"><span>Nom de la recette</span><input type="text" value={titre} onChange={e => setTitre(e.target.value)} placeholder="Ex. : Gratin dauphinois" /></label>
 
@@ -152,6 +216,35 @@ export default function Editer({ id }: { id: string }) {
       <label className="champ"><span>Lien d’origine (facultatif)</span><input type="url" inputMode="url" value={lien} onChange={e => setLien(e.target.value)} placeholder="https://" /></label>
 
       <button className="btn principal plein" onClick={enregistrer}>Enregistrer</button>
+
+      {tri && (
+        <Feuille titre="Texte lu sur la photo" sousTitre="Vérifiez à quoi sert chaque bloc, puis remplissez la fiche." onFermer={() => setTri(null)}>
+          {(tri.infos.portions || tri.infos.preparationMin || tri.infos.cuissonMin) && (
+            <p className="petit" style={{ marginTop: 0 }}>
+              {[tri.infos.portions && `${tri.infos.portions} personnes`, tri.infos.preparationMin && `préparation ${tri.infos.preparationMin} min`, tri.infos.cuissonMin && `cuisson ${tri.infos.cuissonMin} min`].filter(Boolean).join(' · ')}
+            </p>
+          )}
+          {tri.blocs.map(b => (
+            <div key={b.id} className={'bloc-lu' + (b.role === 'ignorer' ? ' ignore' : '')}>
+              <p className="bloc-texte">{b.lignes.join('\n')}</p>
+              <div className="pastilles wrap" role="radiogroup" aria-label="Ce bloc est">
+                {ROLES.map(r => (
+                  <button key={r.id} type="button" role="radio" aria-checked={b.role === r.id} className={'pastille petite' + (b.role === r.id ? ' on' : '')}
+                    onClick={() => setTri(t => t && { ...t, blocs: t.blocs.map(x => x.id === b.id ? { ...x, role: r.id } : x) })}>{r.libelle}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="deux" style={{ marginTop: 12, position: 'sticky', bottom: 0, background: 'var(--surface)', paddingTop: 8 }}>
+            <label className="btn" style={{ position: 'relative' }} aria-busy={lecture !== null}>
+              {enLecture ?? 'Ajouter une page'}
+              <input type="file" accept="image/*" disabled={lecture !== null} style={{ position: 'absolute', inset: 0, opacity: 0 }} aria-label="Ajouter une page"
+                onChange={e => { lirePhoto(e.target.files?.[0]); e.target.value = ''; }} />
+            </label>
+            <button className="btn principal" onClick={appliquerTri}>Remplir la fiche</button>
+          </div>
+        </Feuille>
+      )}
 
       {coller && (
         <Feuille titre="Coller une recette" sousTitre="Titre, « Ingrédients », puis « Préparation » : l’appli s’y retrouve aussi sans ces titres." onFermer={() => setColler(false)}>

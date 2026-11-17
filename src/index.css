@@ -192,6 +192,11 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 /* Divers */
 .carte { background: var(--surface); border: 1px solid var(--ligne); border-radius: var(--rayon); padding: 16px; margin-bottom: 16px; }
 .carte h2 { margin-bottom: 8px; }
+/* Tri du texte lu sur une photo */
+.bloc-lu { border: 1px solid var(--ligne); border-radius: 12px; padding: 10px 12px 2px; margin-bottom: 10px; }
+.bloc-lu.ignore .bloc-texte { color: var(--texte-doux); text-decoration: line-through; }
+.bloc-texte { white-space: pre-line; margin: 0 0 8px; font-size: .9rem; line-height: 1.35; max-height: 9.5em; overflow: auto; }
+.pastille.petite { min-height: 34px; padding: 0 12px; font-size: .85rem; }
 /* Courses */
 .rayon { padding: 12px 16px 6px; }
 .rayon h2 { display: flex; justify-content: space-between; align-items: baseline; }
