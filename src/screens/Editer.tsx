@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { nouvelId, useStore } from '../store';
 import { MOMENTS, MOMENT_LABEL, type Moment, type Recette } from '../types';
 import { compresserPhoto } from '../lib/photo';
 import { lireTexteColle } from '../lib/texte-colle';
+import { lireTexteImage } from '../lib/ocr';
 import { Compteur, Feuille, Icone, toast } from '../ui';
 
 const lignes = (s: string) => s.split('\n').map(l => l.trim()).filter(Boolean);
@@ -26,13 +27,31 @@ export default function Editer({ id }: { id: string }) {
   const [texte, setTexte] = useState('');
   const [nouveauTheme, setNouveauTheme] = useState('');
   const [photoEnCours, setPhotoEnCours] = useState(false);
+  const [lecture, setLecture] = useState<number | null>(null); // avancement de la lecture du texte (0 à 1)
+  const originale = useRef<File | null>(null); // photo d'origine, meilleure que la version compressée pour lire le texte
 
   const choisirPhoto = async (f?: File) => {
     if (!f) return;
+    originale.current = f;
     setPhotoEnCours(true);
     try { setPhoto(await compresserPhoto(f)); } catch { toast('Cette photo n’a pas pu être lue'); }
     setPhotoEnCours(false);
   };
+
+  // Lit le texte de la photo puis l'ouvre dans « Coller une recette » pour relecture avant de remplir les champs
+  const lirePhoto = async (f?: Blob | null) => {
+    if (!f || lecture !== null) return;
+    setLecture(0);
+    try {
+      const t = await lireTexteImage(f, setLecture);
+      if (!t.trim()) toast('Aucun texte trouvé sur cette photo');
+      else { setTexte(t.trim()); setColler(true); }
+    } catch {
+      toast(navigator.onLine ? 'La lecture de la photo a échoué' : 'La première lecture de photo demande une connexion internet');
+    }
+    setLecture(null);
+  };
+  const enLecture = lecture !== null ? `Lecture du texte… ${Math.round(lecture * 100)} %` : null;
 
   const appliquerTexte = () => {
     const r = lireTexteColle(texte);
@@ -76,9 +95,14 @@ export default function Editer({ id }: { id: string }) {
 
       {!existante && (
         <div className="carte">
-          <p style={{ marginTop: 0 }}><b>Gagner du temps</b><br /><span className="doux petit">Copiez le texte d’une recette (site, message, note) et collez-le : l’appli remplit les champs.</span></p>
+          <p style={{ marginTop: 0 }}><b>Gagner du temps</b><br /><span className="doux petit">Photographiez une recette (livre, fiche, capture d’écran) ou collez son texte : l’appli remplit les champs.</span></p>
+          <label className="btn plein" style={{ position: 'relative', marginBottom: 8 }} aria-busy={lecture !== null}>
+            {enLecture ?? 'Lire une recette sur une photo'}
+            <input type="file" accept="image/*" disabled={lecture !== null} style={{ position: 'absolute', inset: 0, opacity: 0 }} aria-label="Lire une recette sur une photo"
+              onChange={e => { lirePhoto(e.target.files?.[0]); e.target.value = ''; }} />
+          </label>
           <button className="btn plein" onClick={() => setColler(true)}>Coller le texte d’une recette</button>
-          <p className="doux petit" style={{ marginBottom: 0 }}>L’import automatique depuis un lien ou une photo de livre arrive en phase 4.</p>
+          <p className="doux petit" style={{ marginBottom: 0 }}>Photo bien droite, nette et éclairée : la lecture est meilleure. La première fois, l’appli télécharge le lecteur de texte (quelques Mo). L’import depuis un lien arrive en phase 4.</p>
         </div>
       )}
       {partage?.lien && !existante && <p className="carte petit">Lien reçu : <a href={partage.lien} target="_blank" rel="noreferrer">{partage.lien}</a><br /><span className="doux">Ouvrez-le, copiez le texte de la recette et collez-le ci-dessus.</span></p>}
@@ -91,7 +115,10 @@ export default function Editer({ id }: { id: string }) {
           {photo ? <img src={photo} alt="Photo de la recette" /> : <span>{photoEnCours ? 'Préparation de la photo…' : 'Prendre ou choisir une photo'}</span>}
           <input type="file" accept="image/*" onChange={e => choisirPhoto(e.target.files?.[0])} aria-label="Photo de la recette" />
         </label>
-        {photo && <button className="lien" onClick={() => setPhoto(undefined)}>Retirer la photo</button>}
+        {photo && <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <button className="lien" disabled={lecture !== null} onClick={async () => lirePhoto(originale.current ?? await (await fetch(photo)).blob())}>{enLecture ?? 'Lire le texte de cette photo'}</button>
+          <button className="lien" onClick={() => { setPhoto(undefined); originale.current = null; }}>Retirer la photo</button>
+        </div>}
       </div>
 
       <div className="portions"><span>Portions</span><Compteur valeur={portions} onChange={setPortions} libelle="Portions" /></div>

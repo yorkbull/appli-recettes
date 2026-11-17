@@ -14,6 +14,12 @@ export function lireTexteColle(texte: string): RecetteLue {
     if (estEtapes(l)) { mode = 'e'; continue; }
     if (!mode) { if (!titre && l.length < 90 && !p) titre = l; continue; }
     const propre = l.replace(/^[-•*·]\s*/, '').replace(/^(?:[ée]tape\s*)?\d+\s*[.):-]\s+/i, '');
+    // Texte lu sur une photo : une phrase d'étape coupée en fin de ligne continue sur la suivante
+    const prec = etapes.length - 1;
+    if (mode === 'e' && prec >= 0 && propre === l && (/^[a-zà-ÿ]/.test(l) || /[,;-]$/.test(etapes[prec]))) {
+      etapes[prec] = /-$/.test(etapes[prec]) ? etapes[prec].slice(0, -1) + l : `${etapes[prec]} ${l}`;
+      continue;
+    }
     (mode === 'i' ? ingredients : etapes).push(propre);
   }
   if (!ingredients.length && !etapes.length) {

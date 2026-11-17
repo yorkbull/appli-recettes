@@ -15,6 +15,7 @@ export default function Semaine() {
   const [choix, setChoix] = useState<Position | null>(null);
   const [menu, setMenu] = useState<Position | null>(null);
   const [mode, setMode] = useState<Mode>(null);
+  const [detail, setDetail] = useState<string | null>(null); // jour affiché en détail
   const auj = aujourdhui();
   const jours = joursSemaine(debut);
   const estCourante = debut === lundi(auj);
@@ -63,6 +64,8 @@ export default function Semaine() {
     else setChoix(pos);
   };
 
+  const vider = (pos: Position) => { mettreCase(pos.date, pos.moment, null); toast('Repas retiré'); };
+
   const fermerChoix = useCallback(() => setChoix(null), []);
   const fermerMenu = useCallback(() => setMenu(null), []);
 
@@ -87,15 +90,33 @@ export default function Semaine() {
         <button className="btn plein" style={{ marginBottom: 12 }} onClick={reprendre}>Reprendre la semaine dernière</button>
       )}
 
-      {jours.map(d => (
-        <section key={d} className={'jour' + (d === auj ? ' auj' : '')} aria-label={dateLongue(d)}>
-          <div className="jour-tete"><b>{nomJour(d)}</b><span className="doux petit">{depuisIso(d).getDate()}</span></div>
-          {MOMENTS.map(m => (
-            <CaseRepas key={m} date={d} moment={m} c={planning[d]?.[m]} cible={!!mode}
-              onToucher={() => toucher({ date: d, moment: m })} onLong={() => !mode && planning[d]?.[m] && setMenu({ date: d, moment: m })} />
-          ))}
-        </section>
-      ))}
+      <div className="grille-semaine">
+        <div className="grille-tete" aria-hidden="true"><span />{MOMENTS.map(m => <span key={m}>{MOMENT_LABEL[m]}</span>)}</div>
+        {jours.map(d => {
+          const ouvert = detail === d && !mode;
+          const props = (m: Moment) => ({
+            date: d, moment: m, c: planning[d]?.[m], cible: !!mode,
+            onToucher: () => toucher({ date: d, moment: m }),
+            onLong: () => { if (!mode && planning[d]?.[m]) setMenu({ date: d, moment: m }); },
+            onVider: () => vider({ date: d, moment: m }),
+          });
+          return (
+            <section key={d} className={'jour' + (d === auj ? ' auj' : '') + (ouvert ? ' ouvert' : '')} aria-label={dateLongue(d)}>
+              {ouvert ? <>
+                <button className="jour-detail-tete" aria-expanded="true" onClick={() => setDetail(null)}>
+                  <b>{dateLongue(d)}</b><span className="lien" style={{ minHeight: 0 }}>Réduire</span>
+                </button>
+                {MOMENTS.map(m => <LigneRepas key={m} {...props(m)} />)}
+              </> : <>
+                <button className="jour-court" aria-label={`Voir le détail de ${dateLongue(d)}`} aria-expanded="false" onClick={() => setDetail(d)}>
+                  <b>{nomJour(d).slice(0, 3)}</b><span>{depuisIso(d).getDate()}</span>
+                </button>
+                {MOMENTS.map(m => <CaseRepas key={m} {...props(m)} />)}
+              </>}
+            </section>
+          );
+        })}
+      </div>
 
       <button className="carte-suivante" onClick={() => setDebut(ajouterJours(debut, 7))}>
         <span>Voir la semaine suivante<br /><span className="doux petit">{nbSuivante ? `${nbSuivante} repas déjà prévu${nbSuivante > 1 ? 's' : ''}` : 'Rien de prévu pour l’instant'}</span></span>
@@ -108,24 +129,58 @@ export default function Semaine() {
   );
 }
 
-function CaseRepas({ date, moment, c, cible, onToucher, onLong }: { date: string; moment: Moment; c?: Case; cible: boolean; onToucher: () => void; onLong: () => void }) {
+type PropsCase = { date: string; moment: Moment; c?: Case; cible: boolean; onToucher: () => void; onLong: () => void; onVider: () => void };
+
+const decrire = (c: Case | undefined, parId: Record<string, { titre: string }>) => {
+  if (!c) return 'rien de prévu';
+  if (c.type === 'dehors') return 'Repas dehors';
+  if (c.type === 'note') return c.texte;
+  const r = parId[c.recetteId];
+  return r ? (c.type === 'restes' ? `Restes : ${r.titre}` : r.titre) : 'Recette supprimée';
+};
+
+// Case de la grille : titre du repas, portions et corbeille pour retirer le choix
+function CaseRepas({ date, moment, c, cible, onToucher, onLong, onVider }: PropsCase) {
+  const { parId } = useStore();
+  const appui = useAppuiLong(onLong, onToucher);
+  const texte = decrire(c, parId);
+  return (
+    <div className={'case' + (cible ? ' cible' : '')}>
+      <button className={'case-titre' + (c ? '' : ' vide')} {...appui} aria-label={`${MOMENT_LABEL[moment]}, ${dateLongue(date)} : ${texte}`}>
+        {c ? texte : '+ Choisir'}
+      </button>
+      {c && (
+        <div className="case-pied">
+          <span>{'portions' in c ? `${c.portions} p.` : ''}</span>
+          {!cible && <button className="corbeille" aria-label={`Retirer le repas du ${MOMENT_LABEL[moment].toLowerCase()}`} onClick={onVider}>{Icone.corbeille}</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Ligne du détail d'un jour : photo, titre complet, portions et corbeille
+function LigneRepas({ date, moment, c, cible, onToucher, onLong, onVider }: PropsCase) {
   const { parId } = useStore();
   const appui = useAppuiLong(onLong, onToucher);
   const r = c && (c.type === 'recette' || c.type === 'restes') ? parId[c.recetteId] : undefined;
   return (
-    <button className={'case' + (cible ? ' cible' : '')} {...appui} aria-label={`${MOMENT_LABEL[moment]}, ${dateLongue(date)} : ${r ? r.titre : c?.type === 'dehors' ? 'repas dehors' : c?.type === 'note' ? c.texte : 'rien de prévu'}`}>
-      <span className="moment">{MOMENT_LABEL[moment]}</span>
-      <span className="contenu">
-        {!c && <span className="vide">+ Choisir</span>}
-        {c?.type === 'dehors' && <span>Repas dehors</span>}
-        {c?.type === 'note' && <span>{c.texte}</span>}
-        {(c?.type === 'recette' || c?.type === 'restes') && (r ? <>
-          {r.photo ? <img className="vignette" src={r.photo} alt="" /> : <span className="vignette sans-photo" style={{ fontSize: '1rem' }}>{r.titre[0]}</span>}
-          <span>{c.type === 'restes' && <span className="etiquette restes">Restes</span>} {r.titre}</span>
-        </> : <span className="vide">Recette supprimée</span>)}
-      </span>
-      {c && <span className="doux petit" style={{ paddingRight: 8 }}>{'portions' in c ? `${c.portions} p.` : ''}</span>}
-    </button>
+    <div className="ligne-repas">
+      <button className="case-ligne" {...appui} aria-label={`${MOMENT_LABEL[moment]}, ${dateLongue(date)} : ${decrire(c, parId)}`}>
+        <span className="moment">{MOMENT_LABEL[moment]}</span>
+        <span className="contenu">
+          {!c && <span className="vide">+ Choisir</span>}
+          {c?.type === 'dehors' && <span>Repas dehors</span>}
+          {c?.type === 'note' && <span>{c.texte}</span>}
+          {(c?.type === 'recette' || c?.type === 'restes') && (r ? <>
+            {r.photo ? <img className="vignette" src={r.photo} alt="" /> : <span className="vignette sans-photo" style={{ fontSize: '1rem' }}>{r.titre[0]}</span>}
+            <span>{c.type === 'restes' && <span className="etiquette restes">Restes</span>} {r.titre}</span>
+          </> : <span className="vide">Recette supprimée</span>)}
+        </span>
+        {c && <span className="doux petit">{'portions' in c ? `${c.portions} p.` : ''}</span>}
+      </button>
+      {c && !cible ? <button className="corbeille" aria-label={`Retirer le repas du ${MOMENT_LABEL[moment].toLowerCase()}`} onClick={onVider}>{Icone.corbeille}</button> : <span />}
+    </div>
   );
 }
 

@@ -64,15 +64,38 @@ img { display: block; max-width: 100%; }
 .jour-tete { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 14px 6px; }
 .jour-tete b { font-family: var(--police-titre); font-size: 1.1rem; text-transform: capitalize; }
 .jour.auj .jour-tete b::after { content: " · aujourd'hui"; font-family: var(--police-texte); font-size: .8rem; color: var(--accent); font-weight: 600; }
-.case { display: grid; grid-template-columns: 56px 1fr auto; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 6px 6px 6px 14px; border: 0; border-top: 1px solid var(--ligne); background: none; text-align: left; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-.case .moment { font-size: .8rem; color: var(--texte-doux); text-transform: uppercase; letter-spacing: .04em; }
-.case .contenu { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.case .contenu span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.case .vide { color: var(--texte-doux); }
-.case .vignette { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex: none; background: var(--surface-2); }
+/* Semaine en grille : les 7 jours tiennent sur l'écran (hauteur d'un jour calculée sur la place disponible) */
+.grille-semaine { --h-jour: max(64px, calc((100dvh - var(--barre-h) - var(--menu-h) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 196px) / 7 - 10px)); }
+.grille-tete, .grille-semaine .jour { display: grid; grid-template-columns: 44px repeat(3, minmax(0, 1fr)); gap: 4px; }
+.grille-tete { padding: 0 4px 4px; font-size: .72rem; color: var(--texte-doux); text-transform: uppercase; letter-spacing: .04em; text-align: center; }
+.grille-semaine .jour { padding: 3px; margin-bottom: 4px; border-radius: 12px; box-shadow: none; }
+.grille-semaine .jour.ouvert { grid-template-columns: 1fr; }
+.jour-court { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: var(--h-jour); border: 0; background: none; padding: 0; border-radius: 8px; }
+.jour-court b { font-family: var(--police-titre); font-size: .95rem; text-transform: capitalize; }
+.jour-court span { font-size: .8rem; color: var(--texte-doux); }
+.jour.auj .jour-court b, .jour.auj .jour-court span { color: var(--accent); font-weight: 700; }
+.jour-court:active { background: var(--surface-2); }
+.case { display: flex; flex-direction: column; min-width: 0; min-height: var(--h-jour); border: 1px solid var(--ligne); border-radius: 8px; background: var(--fond); overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .case.cible { background: var(--accent-doux); }
-.case:active { background: var(--surface-2); }
-.case .plus { width: 40px; height: 40px; }
+.case-titre { flex: 1; width: 100%; min-height: 0; padding: 5px 6px 0; border: 0; background: none; text-align: left; font-size: .8rem; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; word-break: break-word; }
+.case-titre:active { background: var(--surface-2); }
+.case-titre.vide { color: var(--texte-doux); text-align: center; display: flex; align-items: center; justify-content: center; padding: 0; }
+.case-pied { display: flex; align-items: center; justify-content: space-between; min-height: 26px; padding-left: 6px; font-size: .7rem; color: var(--texte-doux); }
+.corbeille { display: flex; align-items: center; justify-content: center; width: 34px; height: 30px; flex: none; border: 0; background: none; color: var(--texte-doux); }
+.corbeille svg { width: 17px; height: 17px; }
+.corbeille:active { color: var(--danger, #b3261e); }
+.jour-detail-tete { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 6px 8px 8px; border: 0; background: none; text-align: left; }
+.jour-detail-tete b { font-family: var(--police-titre); font-size: 1.1rem; text-transform: capitalize; }
+/* Détail d'un jour (après avoir touché le jour) */
+.ligne-repas { display: grid; grid-template-columns: 1fr auto; align-items: center; border-top: 1px solid var(--ligne); }
+.ligne-repas .case-ligne { display: grid; grid-template-columns: 56px 1fr auto; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 6px 6px 6px 8px; border: 0; background: none; text-align: left; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.ligne-repas .case-ligne:active { background: var(--surface-2); }
+.ligne-repas .moment { font-size: .8rem; color: var(--texte-doux); text-transform: uppercase; letter-spacing: .04em; }
+.ligne-repas .contenu { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ligne-repas .contenu span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ligne-repas .vide { color: var(--texte-doux); }
+.ligne-repas .vignette { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex: none; background: var(--surface-2); }
+.ligne-repas .corbeille { width: 44px; height: 44px; }
 .etiquette { display: inline-block; font-size: .75rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--texte-doux); }
 .etiquette.restes { background: #e7efe4; color: var(--ok); }
 .carte-suivante { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 18px; border-radius: var(--rayon); border: 2px dashed var(--ligne); background: none; font-weight: 600; text-align: left; }
