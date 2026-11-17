@@ -11,6 +11,8 @@ et, dans les phases suivantes, générer la liste de courses.
 - Ajout : saisie, photo compressée, texte collé découpé automatiquement, lien reçu par « Partager »
 - Mise à jour 1 : semaine en grille qui tient sur l'écran (touchez un jour pour le détail), corbeille sur chaque repas,
   lecture du texte d'une photo de recette (Tesseract, chargé à la demande) qui remplit les champs
+- Courses (onglet du menu) : ingrédients de la semaine additionnés et ajustés aux portions, rangés en
+  Fruits / Légumes / Viande et poisson / Autres, cases à cocher, export « Partager » ou « Copier » vers une note
 - Réglages : nom, thématiques, portions par défaut, export / restauration
 - Données stockées sur le téléphone (IndexedDB), fonctionne hors ligne
 

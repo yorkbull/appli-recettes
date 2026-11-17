@@ -9,6 +9,7 @@ import Editer from './screens/Editer';
 import Cuisine from './screens/Cuisine';
 import ReglagesEcran from './screens/Reglages';
 import Batch from './screens/Batch';
+import Courses from './screens/Courses';
 
 // Navigation par l'adresse (#/semaine, #/recette/abc…) : le bouton retour d'Android fonctionne naturellement
 export const aller = (chemin: string) => { location.hash = chemin; };
@@ -36,6 +37,7 @@ export default function App() {
     case 'cuisine': return <Cuisine id={id} />;
     case 'reglages': contenu = <ReglagesEcran />; break;
     case 'batch': contenu = <Batch />; break;
+    case 'courses': contenu = <Courses />; break;
     default: contenu = <Semaine />;
   }
 
@@ -51,6 +53,7 @@ export default function App() {
         <a href="#/semaine" className={onglet === 'semaine' || !onglet ? 'actif' : ''}>{Icone.semaine}Semaine</a>
         <a href="#/mois" className={onglet === 'mois' ? 'actif' : ''}>{Icone.mois}Mois</a>
         <a href="#/recettes" className={onglet === 'recettes' ? 'actif' : ''}>{Icone.livre}Mes recettes</a>
+        <a href="#/courses" className={onglet === 'courses' ? 'actif' : ''}>{Icone.courses}Courses</a>
         <a href="#/batch" className={onglet === 'batch' ? 'actif' : ''}>{Icone.batch}Batch cooking</a>
       </nav>
       <Toasts />
