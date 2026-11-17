@@ -64,9 +64,19 @@ function eclater(lignes: string[], min = 2): string[] {
 // On recoupe devant une nouvelle quantité suivie d'une unité ou d'un mot (pas après « de », « à », « ou »).
 const UNITE = '(?:k?g|cl|ml|l|cuil|c\\.|cs|cc|pots?|bottes?|gousses?|tranches?|pinc[ée]es?|sachets?|feuilles?|brins?|petite?s?|grosse?s?|belles?|[a-zà-ÿœ]{3,})';
 const NOUVELLE_QTE = new RegExp(`(?<!(?:^|\\s)(?:de|à|ou|et|en|sur|par|soupe|café|avec|environ))\\s+(?=\\d+(?:[,.]\\d+)?\\s?${UNITE}(?![a-zà-ÿœ]))`, 'i');
-const couperQuantites = (x: string) => x.split(NOUVELLE_QTE);
-// « ½ » est souvent lu Y, %, V ou //, : on le remet devant une unité courante
-const demi = (l: string) => l.replace(/^[[(|]?\s*(?:Y|%|V|¥|Vz|Ya|\/\/|1\/2)[»,.]?\s+(?=(botte|cuil|c\.|verre|tasse|sachet|citron|gousse|bouquet|litre|l\b|cl\b|kg\b|g\b))/i, '½ ');
+// (et devant un assaisonnement seul en fin de ligne, quand la puce qui le séparait a été perdue : « … huile végétale Poivre »)
+const couperQuantites = (x: string) => x.split(NOUVELLE_QTE).flatMap(m => m.split(/\s+(?=(?:Sel|Poivre|Sucre|Beurre|Persil|Ciboulette|Fleur de sel)$)/));
+// « ½ » est souvent lu Y, %, V ou //, : on le remet devant une unité courante ;
+// « 2 botte » (nom au singulier après 2) est aussi un ½ mal lu
+const demi = (l: string) => l.replace(/^[[(|]?\s*(?:Y|%|V|¥|Vz|Ya|\/\/|1\/2)[»,.]?\s+(?=(botte|cuil|c\.|verre|tasse|sachet|citron|gousse|bouquet|litre|l\b|cl\b|kg\b|g\b))/i, '½ ')
+  .replace(/^2\s+(?=(?:botte|gousse|tranche|pinc[ée]e|tasse|verre|sachet|bouquet|branche|feuille|citron|oignon)\b(?!s))/i, '½ ');
+// combien de « quantité + ingrédient » dans un texte (« 1 citron vert », « 4 cuil. à soupe… »)
+const nbQuantites = (t: string) => (t.match(new RegExp(`(?:^|\\s)\\d+(?:[,.]\\d+)?\\s?${UNITE}(?![a-zà-ÿœ])`, 'gi')) ?? []).length;
+// numéro d'étape mal lu en début de bloc : « ka. », « ®. », « T. », « M. »
+const NUM_MAL_LU = /^[^\sA-Za-zÀ-ÿ]{0,2}[A-Za-z%®©]{0,2}\s*[.)]\s+(?=[A-ZÀ-Ý])/;
+// fin de phrase, sauf le point d'une abréviation (« 4 cuil. », « 1 c. », « env. »)
+const finDePhrase = (t: string) => /[.!]\s*$/.test(t) && !/\b(cuil|c|env|gr|pers|cs|cc|càs|càc)\.\s*$/i.test(t);
+const suiteDePhrase =(t: string) => /^[a-zà-ÿ]/.test(t) && !NUM_MAL_LU.test(t);
 
 function noter(lignes: string[]) {
   const n = lignes.length || 1;
@@ -99,10 +109,12 @@ export function analyser(paragraphes: Paragraphe[], depart = 0): { blocs: Bloc[]
       if (!seg.length) return;
       const prec = blocs[blocs.length - 1];
       // un bloc qui commence par une minuscule est la suite du bloc précédent (phrase coupée par la mise en page)
-      const role = force ?? (prec && /^[a-zà-ÿ]/.test(seg[0]) ? prec.role : deviner(seg));
+      const role = force ?? (prec && suiteDePhrase(seg[0]) ? prec.role : deviner(seg));
       blocs.push({ id: id++, lignes: seg, role, hauteur: p.hauteur });
       // une fois les étapes commencées, la suite de la colonne est lue comme des étapes
       if (!force && role === 'etapes' && courant !== 'ignorer') courant = 'etapes';
+      // de même pour une liste d'ingrédients reconnue sans intertitre lisible
+      if (!force && role === 'ingredients' && courant === null) courant = 'ingredients';
       seg = [];
     };
     const deviner = (lignes: string[]): Role => {
@@ -112,10 +124,15 @@ export function analyser(paragraphes: Paragraphe[], depart = 0): { blocs: Bloc[]
       if (courant === 'ignorer') return 'ignorer';
       // lignes tout en capitales avant la recette : morceau de titre, pas une liste
       if (courant === null && lignes.every(l => l === l.toUpperCase() && /[A-ZÀ-Ý]{3}/.test(l))) return 'ignorer';
+      // « 1. Décortiquez… » : un numéro suivi d'une phrase est une étape, pas « 1 » ingrédient
+      if (courant !== null && /^\d{1,2}\s*[.)]\s+[A-ZÀ-Ý][a-zà-ÿ]/.test(lignes[0]) && s.moyenne >= 25) return 'etapes';
       if (avecIntertitres && courant === null) return s.quant >= 0.6 && lignes.length >= 3 ? 'ingredients' : 'ignorer';
       if (courant === 'ingredients' && (s.quant >= 0.3 || s.courtes >= 0.7)) return 'ingredients';
       // fin d'une liste d'ingrédients à la suite : « Le jus de 1 citron vert • 4 cuil. à soupe d'huile »
-      if (courant === 'ingredients' && (texte.match(PUCE) ?? []).length >= 1 && !/[.!]\s*$/.test(texte)) return 'ingredients';
+      if (courant === 'ingredients' && (texte.match(PUCE) ?? []).length >= 1 && !finDePhrase(texte)) return 'ingredients';
+      // …ou même sans puce lisible et placée plus loin (bout de ligne d'une page bombée) : plusieurs
+      // « quantité + ingrédient », pas de phrase, pas de verbe en tête (« Ajoutez 2 cuil… » est une étape)
+      if (courant !== null && nbQuantites(texte) >= 2 && !finDePhrase(texte) && lignes.length <= 3 && !/^[A-ZÀ-Ý][a-zà-ÿ]+(ez|er)\b/.test(texte)) return 'ingredients';
       if (courant === 'etapes' && (s.moyenne >= 25 || s.phrases >= 0.5)) return 'etapes';
       if (s.quant >= 0.5 && s.moyenne < 55) return 'ingredients';
       if (s.phrases >= 0.3 || s.moyenne >= 45) return 'etapes';
@@ -160,7 +177,8 @@ export function assembler(blocs: Bloc[]) {
 
   // Ingrédients : une ligne par ingrédient ; une ligne sans quantité qui commence en minuscule continue la précédente
   const ingredients: string[] = [];
-  for (const b of blocs.filter(x => x.role === 'ingredients').map(x => ({ ...x, lignes: x.lignes.flatMap(l => eclater([l], 1)) }))) for (const [i, brut] of b.lignes.entries()) {
+  // (découpe aussi sans puce visible : « Le jus de 1 citron vert 4 cuil. à soupe… » → deux ingrédients)
+  for (const b of blocs.filter(x => x.role === 'ingredients').map(x => ({ ...x, lignes: x.lignes.flatMap(l => eclater([l], 1)).flatMap(couperQuantites).map(l => l.trim()).filter(Boolean) }))) for (const [i, brut] of b.lignes.entries()) {
     const l = demi(sansPuce(brut));
     if (!l) continue;
     const prec = ingredients[ingredients.length - 1];
@@ -180,7 +198,7 @@ export function assembler(blocs: Bloc[]) {
   const blocsEtapes: string[] = [];
   for (const b of blocs.filter(x => x.role === 'etapes')) {
     const t = coller(b.lignes);
-    if (blocsEtapes.length && /^[a-zà-ÿ]/.test(t)) blocsEtapes[blocsEtapes.length - 1] = coller([blocsEtapes[blocsEtapes.length - 1], t]);
+    if (blocsEtapes.length && suiteDePhrase(t)) blocsEtapes[blocsEtapes.length - 1] = coller([blocsEtapes[blocsEtapes.length - 1], t]);
     else blocsEtapes.push(t);
   }
   // en plus, une numérotation (1. 2. / Étape 3) à l'intérieur d'un bloc découpe ce bloc
@@ -205,5 +223,42 @@ export function qualite(p: Paragraphe[]): number {
   if (ing.length) n += 0.45 * (bonsIng / ing.length) * Math.min(1, avecQte / 3);
   if (et.length) n += 0.45 * (bonnesEt / et.length) * Math.min(1, et.length / 2);
   if (a.titre && a.titre.length >= 5) n += 0.1;
+  // Départage des bonnes lectures (plusieurs atteignent 1) : plus d'ingrédients et d'étapes propres, c'est mieux ;
+  // deux ingrédients collés, une puce restée dans une étape ou une étape qui commence en minuscule, c'est moins bien.
+  n += 0.004 * Math.min(avecQte, 25) + 0.004 * Math.min(bonnesEt, 15);
+  n -= 0.03 * ing.filter(l => nbQuantites(l) >= 2 || /\bà soupe\b.*\bà soupe\b/.test(l)).length;
+  n -= 0.03 * et.filter(e => /^[a-zà-ÿ]/.test(e) || /\s[•*®©«»]\s|\s[•*®©«»]$/.test(e) || nbQuantites(e) >= 2 && !/[.!]$/.test(e)).length;
   return n;
+}
+
+// Ingrédients qu'une autre bonne lecture de la même photo a trouvés et qui manquent à la lecture retenue
+// (une ligne au bord d'une page bombée est parfois lue par une version de la photo et pas par l'autre).
+const normaliser = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+function ressemblance(a: string, b: string): number {
+  a = normaliser(a); b = normaliser(b);
+  const m = a.length, n = b.length;
+  if (!m || !n) return 0;
+  let prec = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) cur[j] = Math.min(prec[j] + 1, cur[j - 1] + 1, prec[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prec = cur;
+  }
+  return 1 - prec[n] / Math.max(m, n);
+}
+export function ingredientsManquants(retenue: Paragraphe[], autres: Paragraphe[][]): string[] {
+  const deja = assembler(analyser(retenue).blocs).ingredients;
+  const ajouts: string[] = [];
+  for (const p of autres) {
+    if (p === retenue || qualite(p) < 0.8) continue;
+    for (const l of assembler(analyser(p).blocs).ingredients) {
+      const mots = normaliser(l).split(' ').filter(m => m.length >= 4 && !['cuil', 'soupe', 'cafe', 'cuillere'].includes(m));
+      // un ingrédient n'est ni une phrase (« …Réserver. »), ni une étape numérotée, ni un début de consigne (« Saler, … »)
+      const propre = l.length <= 55 && nbQuantites(l) <= 1 && !/[•*®©«»]/.test(l) && mots.length >= 1 && l !== l.toUpperCase()
+        && !finDePhrase(l) && !/^\d{1,2}\s*[.)]/.test(l) && !/^[A-ZÀ-Ý][a-zà-ÿ]+(er|ez)\b/.test(l) && !/[.!]\s+[A-ZÀ-Ý]/.test(l);
+      const connu = [...deja, ...ajouts].some(d => ressemblance(d, l) >= 0.75 || normaliser(l).startsWith(normaliser(d)) || normaliser(d).includes(normaliser(l)));
+      if (propre && !connu) ajouts.push(l);
+    }
+  }
+  return ajouts;
 }

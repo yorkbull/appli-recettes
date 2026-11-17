@@ -28,7 +28,8 @@ interface Morceau { mots: Mot[]; x0: number; x1: number; y0: number; y1: number;
 // On garde la première qui trouve à la fois des ingrédients et des étapes (note de juger), sinon la mieux notée.
 // Deux passages : la photo telle quelle (en gris), puis une version « nettoyée » (fond éclairci, ombres et
 // photo sombre corrigées). Sur les essais, chacune rattrape des photos que l'autre lit mal.
-export async function lirePhoto(fichier: Blob, progres?: (p: number) => void, juger?: (p: Paragraphe[]) => number): Promise<Paragraphe[]> {
+// La lecture retenue est renvoyée avec les autres essais (« autres »), qui servent à compléter les ingrédients.
+export async function lirePhoto(fichier: Blob, progres?: (p: number) => void, juger?: (p: Paragraphe[]) => number): Promise<Paragraphe[] & { autres: Paragraphe[][] }> {
   const { gris, nettoyee, largeur } = await preparer(fichier);
   const { createWorker, PSM } = await import('tesseract.js');
   let passe = 0;
@@ -43,7 +44,7 @@ export async function lirePhoto(fichier: Blob, progres?: (p: number) => void, ju
       essais.push(...lectures(blocs, largeur));
       passe++;
     }
-    return meilleureLecture(essais, juger).lecture;
+    return Object.assign(meilleureLecture(essais, juger).lecture, { autres: essais });
   } finally {
     await worker.terminate();
   }
