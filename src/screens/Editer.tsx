@@ -4,7 +4,7 @@ import { MOMENTS, MOMENT_LABEL, type Moment, type Recette } from '../types';
 import { compresserPhoto } from '../lib/photo';
 import { lireTexteColle } from '../lib/texte-colle';
 import { lirePhoto as lireTexteImagePara } from '../lib/ocr';
-import { analyser, assembler, ROLES, type Bloc, type Infos } from '../lib/fiche-photo';
+import { analyser, assembler, qualite, ROLES, type Bloc, type Infos } from '../lib/fiche-photo';
 import { lireLien } from '../lib/lien';
 import { Compteur, Feuille, Icone, toast } from '../ui';
 
@@ -47,7 +47,8 @@ export default function Editer({ id }: { id: string }) {
     if (!f || lecture !== null) return;
     setLecture(0);
     try {
-      const paragraphes = await lireTexteImagePara(f, setLecture);
+      // plusieurs lectures de la page sont faites : on garde celle qui donne la fiche la plus propre
+      const paragraphes = await lireTexteImagePara(f, setLecture, qualite);
       const depart = tri ? Math.max(0, ...tri.blocs.map(b => b.id)) + 1 : 0;
       const r = analyser(paragraphes, depart);
       if (!r.blocs.length) toast('Aucun texte lisible sur cette photo : photographiez la page bien à plat, nette et éclairée');
