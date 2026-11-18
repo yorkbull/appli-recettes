@@ -29,25 +29,70 @@ interface Morceau { mots: Mot[]; x0: number; x1: number; y0: number; y1: number;
 // Deux passages : la photo telle quelle (en gris), puis une version « nettoyée » (fond éclairci, ombres et
 // photo sombre corrigées). Sur les essais, chacune rattrape des photos que l'autre lit mal.
 // La lecture retenue est renvoyée avec les autres essais (« autres »), qui servent à compléter les ingrédients.
-export async function lirePhoto(fichier: Blob, progres?: (p: number) => void, juger?: (p: Paragraphe[]) => number): Promise<Paragraphe[] & { autres: Paragraphe[][] }> {
-  const { gris, nettoyee, largeur } = await preparer(fichier);
+export async function lirePhoto(fichier: Blob, progres?: (p: number) => void, choisir?: (essais: Paragraphe[][]) => Paragraphe[]): Promise<Paragraphe[] & { autres: Paragraphe[][] }> {
+  const bmp = await createImageBitmap(fichier, { imageOrientation: 'from-image' });
   const { createWorker, PSM } = await import('tesseract.js');
   let passe = 0;
   const worker = await createWorker('fra', 1, {
-    logger: m => { if (m.status === 'recognizing text') progres?.((passe + m.progress) / 2); },
+    logger: m => { if (m.status === 'recognizing text') progres?.((passe + m.progress) / 4); },
   });
   try {
     await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO, preserve_interword_spaces: '1' });
-    const essais: Paragraphe[][] = [];
-    for (const image of [gris, nettoyee]) {
+    const lire = async (image: Blob) => {
       const blocs = ((await worker.recognize(image, {}, { blocks: true, text: true })).data.blocks ?? []) as unknown as BlocTess[];
-      essais.push(...lectures(blocs, largeur));
       passe++;
-    }
-    return Object.assign(meilleureLecture(essais, juger).lecture, { autres: essais });
+      return blocs;
+    };
+    // 1er passage, photo réduite : les très gros titres (lettres de plus de 100 px une fois agrandies) n'y sont
+    // lus qu'à cette taille ; il donne aussi l'inclinaison de la page.
+    const petite = await preparer(bmp, 1300, 0);
+    const blocsP = await lire(petite.gris);
+    const angle = inclinaison(blocsP);
+    // 2e et 3e passages en grand, photo redressée : en gris, puis « nettoyée »
+    const grande = await preparer(bmp, 2600, angle);
+    // les lectures de la photo réduite ne servent qu'au titre et aux infos (marquées « petite ») : leur texte est moins sûr
+    const essais: Paragraphe[][] = lectures(blocsP, petite.largeur).map(l => Object.assign(l, { petite: true }));
+    // titre seul, en mode « texte épars » sur la photo réduite : la mise en page automatique prend parfois
+    // un titre en très gros caractères pour une image et l'oublie
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT });
+    const titre = grosTitre(await lire(petite.gris));
+    if (titre) essais.push([titre]);
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO });
+    for (const image of [grande.gris, grande.nettoyee]) essais.push(...lectures(await lire(image), grande.largeur));
+    const retenue = choisir ? choisir(essais) : essais[0];
+    return Object.assign([...retenue], { autres: essais.filter(e => !('petite' in e) && !(e.length === 1 && e[0].groupe === -2)) });
   } finally {
+    bmp.close();
     await worker.terminate();
   }
+}
+
+// Titre : les mots nettement plus gros que le texte courant (plus de 2,2 fois), bien lus, en haut de la page,
+// regroupés en lignes. Rendu comme un paragraphe à part, très haut, marqué groupe -2.
+export function grosTitre(blocs: BlocTess[]): Paragraphe | null {
+  const mots = blocs.flatMap(b => b.paragraphs.flatMap(p => p.lines.flatMap(l => l.words)));
+  const hMed = mediane(mots.map(w => w.bbox.y1 - w.bbox.y0));
+  const bas = Math.max(...mots.map(w => w.bbox.y1), 0);
+  const gros = mots.filter(w => w.confidence >= 80 && w.text === w.text.toUpperCase() && w.bbox.y1 - w.bbox.y0 >= 2.2 * hMed && w.bbox.y0 < bas * 0.45
+    && (w.text.match(/[A-Za-zÀ-ÿ]/g)?.length ?? 0) >= 2).sort((a, b) => a.bbox.y0 - b.bbox.y0);
+  if (!gros.length) return null;
+  const lignes: (typeof gros)[] = [];
+  for (const w of gros) {
+    const l = lignes.find(x => x.some(v => Math.min(v.bbox.y1, w.bbox.y1) - Math.max(v.bbox.y0, w.bbox.y0) > 0.5 * (w.bbox.y1 - w.bbox.y0)));
+    if (l) l.push(w); else lignes.push([w]);
+  }
+  const texte = lignes.map(l => l.sort((a, b) => a.bbox.x0 - b.bbox.x0).map(w => w.text.trim()).join(' '));
+  const h = mediane(gros.map(w => w.bbox.y1 - w.bbox.y0));
+  return { lignes: texte, hauteur: h, haut: gros[0].bbox.y0, gauche: Math.min(...gros.map(w => w.bbox.x0)), groupe: -2 };
+}
+
+// Inclinaison de la page (en radians) : médiane de l'angle des lignes de texte assez longues
+export function inclinaison(blocs: BlocTess[]): number {
+  const angles = blocs.flatMap(b => b.paragraphs.flatMap(p => p.lines))
+    .filter(l => l.baseline && l.baseline.x1 - l.baseline.x0 > 150 && l.confidence >= 60)
+    .map(l => Math.atan2(l.baseline!.y1 - l.baseline!.y0, l.baseline!.x1 - l.baseline!.x0));
+  const a = angles.length >= 3 ? mediane(angles) : 0;
+  return Math.abs(a) > 0.004 && Math.abs(a) < 0.2 ? a : 0; // entre 0,2° et 11°
 }
 
 const lectures = (blocs: BlocTess[], largeur: number) => {
@@ -289,16 +334,21 @@ export function mettreEnPage(tous: Mot[], largeur: number): Paragraphe[] {
 // une photo trop petite est agrandie (Tesseract lit mal les lettres de moins de 20 px), une trop grande réduite.
 // Version « nettoyée » : chaque point est divisé par la luminosité du fond autour de lui (fond estimé sur une
 // image réduite 16 fois), ce qui efface ombres et dégradés, puis le contraste est étiré.
-async function preparer(fichier: Blob, cible = 2600): Promise<{ gris: Blob; nettoyee: Blob; largeur: number }> {
-  const bmp = await createImageBitmap(fichier, { imageOrientation: 'from-image' });
+async function preparer(bmp: ImageBitmap, cible: number, angle: number): Promise<{ gris: Blob; nettoyee: Blob; largeur: number }> {
   const k = Math.min(2, cible / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas');
   const W = c.width = Math.round(bmp.width * k), H = c.height = Math.round(bmp.height * k);
   const ctx = c.getContext('2d', { willReadFrequently: true })!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
   ctx.filter = 'grayscale(1)';
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(bmp, 0, 0, W, H);
-  bmp.close();
+  // redressement : on tourne la photo autour de son centre (les coins découverts restent blancs)
+  ctx.translate(W / 2, H / 2);
+  ctx.rotate(-angle);
+  ctx.drawImage(bmp, -W / 2, -H / 2, W, H);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.filter = 'none';
   const enPng = (cv: HTMLCanvasElement) => new Promise<Blob>((ok, ko) => cv.toBlob(b => b ? ok(b) : ko(new Error('image')), 'image/png'));
   const gris = await enPng(c);
 

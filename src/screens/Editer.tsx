@@ -4,7 +4,7 @@ import { MOMENTS, MOMENT_LABEL, type Moment, type Recette } from '../types';
 import { compresserPhoto } from '../lib/photo';
 import { lireTexteColle } from '../lib/texte-colle';
 import { lirePhoto as lireTexteImagePara } from '../lib/ocr';
-import { analyser, assembler, ingredientsManquants, qualite, ROLES, type Bloc, type Infos } from '../lib/fiche-photo';
+import { analyser, assembler, choisirFiche, ingredientsManquants, ROLES, type Bloc, type Infos } from '../lib/fiche-photo';
 import { lireLien } from '../lib/lien';
 import { Compteur, Feuille, Icone, toast } from '../ui';
 
@@ -48,7 +48,7 @@ export default function Editer({ id }: { id: string }) {
     setLecture(0);
     try {
       // plusieurs lectures de la page sont faites : on garde celle qui donne la fiche la plus propre
-      const paragraphes = await lireTexteImagePara(f, setLecture, qualite);
+      const paragraphes = await lireTexteImagePara(f, setLecture, choisirFiche);
       const depart = tri ? Math.max(0, ...tri.blocs.map(b => b.id)) + 1 : 0;
       const r = analyser(paragraphes, depart);
       // ingrédients lus par une autre version de la photo seulement : proposés dans un bloc à part, à vérifier

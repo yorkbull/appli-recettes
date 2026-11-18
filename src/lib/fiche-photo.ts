@@ -19,7 +19,7 @@ export interface Infos { portions?: number; preparationMin?: number; cuissonMin?
 
 const TITRE_ING = /^in[gc]r[ée]dients?\b\s*:?/i; // « INCRÉDIENTS » : G lu C
 const TITRE_ETAPES = /^(pr[ée]paration|r[ée]alisation|instructions?|[ée]tapes|la recette|d[ée]roulement|recette|progression)\s*:?\s*$/i;
-const A_IGNORER = /^(astuce|conseil|le conseil|notre conseil|variante|le petit plus|accord|vin conseill|bon app[ée]tit|difficult[ée]|co[uû]t|niveau|mat[ée]riel|ustensiles?)\b/i;
+const A_IGNORER = /^(astuces?|conseils?|le conseil|notre conseil|variantes?|le petit plus|accord|vin conseill|bon app[ée]tit|difficult[ée]|co[uû]t|niveau|mat[ée]riel|ustensiles?)\b/i;
 const PORTIONS = /(?:pour\s+(\d{1,2})\s*(?:pers|personnes?|parts?|portions?|convives?)?)|(\d{1,2})\s*(?:pers\b|pers\.|personnes?|parts|portions)/i;
 const TEMPS = /(pr[ée]paration|pr[ée]p\.?|cuisson|repos|temps total)\s*:?\s*(.*\d.*)/i;
 
@@ -37,16 +37,19 @@ function lireInfos(l: string, infos: Infos): boolean {
     trouve = true;
   }
   // forme inversée : « 20 min de préparation », « 1 h 30 de cuisson »
-  for (const t of l.matchAll(/(\d+\s*(?:h|heures?|min|minutes?)(?:\s*\d+)?)\s*(?:min\w*)?\s*(?:de|d['’])\s*(pr[ée]paration|cuisson)/gi)) {
+  for (const t of l.matchAll(/(\d+\s*(?:h|heures?|min|minutes?)(?:\s*\d+)?)\s*(?:min\w*)?\s*(?:de|d['’])\s*(pr[ée]paration|cuisson|repos|marinade)/gi)) {
     const min = minuteurs(t[1]).reduce((s, m) => s + m.secondes / 60, 0) || (/h/i.test(t[1]) ? +t[1].match(/\d+/)![0] * 60 : +t[1].match(/\d+/)![0]);
     if (!min) continue;
-    if (/cuisson/i.test(t[2])) infos.cuissonMin ??= min; else infos.preparationMin ??= min;
+    if (/cuisson/i.test(t[2])) infos.cuissonMin ??= min; else if (/pr[ée]p/i.test(t[2])) infos.preparationMin ??= min;
     trouve = true;
   }
   const p = l.match(PORTIONS);
   if (p && (trouve || l.length < 60)) { infos.portions ??= +(p[1] ?? p[2]); trouve = true; }
   return trouve && l.length < 100;
 }
+
+// Numéro d'étape mal lu en début de ligne : « ki. Préparez » (4.), « bi. », « B. », « I. »
+const NUM_LU = /^[A-Za-zà-ÿ%]{1,2}\s?[.)]\s+(?=[A-ZÀ-Ý][a-zà-ÿ])/;
 
 // Lettres mal lues en début de ligne : puces « • » lues « e », « ° », « » »…
 const sansPuce = (l: string) => l.replace(/^[-–—•*·°»«>~+]\s*/, '').replace(/^[eo©®]\s+(?=\d)/, '').trim();
@@ -68,7 +71,7 @@ const NOUVELLE_QTE = new RegExp(`(?<!(?:^|\\s)(?:de|à|ou|et|en|sur|par|soupe|ca
 const couperQuantites = (x: string) => x.split(NOUVELLE_QTE).flatMap(m => m.split(/\s+(?=(?:Sel|Poivre|Sucre|Beurre|Persil|Ciboulette|Fleur de sel)$)/));
 // « ½ » est souvent lu Y, %, V ou //, : on le remet devant une unité courante ;
 // « 2 botte » (nom au singulier après 2) est aussi un ½ mal lu
-const demi = (l: string) => l.replace(/^[[(|]?\s*(?:Y|%|V|¥|Vz|Ya|\/\/|1\/2)[»,.]?\s+(?=(botte|cuil|c\.|verre|tasse|sachet|citron|gousse|bouquet|litre|l\b|cl\b|kg\b|g\b))/i, '½ ')
+const demi = (l: string) => l.replace(/^(?:V2|Vz|Y2|Ya|1\/2)\s+(?=[a-zà-ÿ])/, '½ ').replace(/^[[(|]?\s*(?:Y|%|V|¥|Vz|Ya|\/\/|1\/2)[»,.]?\s+(?=(botte|cuil|c\.|verre|tasse|sachet|citron|gousse|bouquet|litre|l\b|cl\b|kg\b|g\b))/i, '½ ')
   .replace(/^2\s+(?=(?:botte|gousse|tranche|pinc[ée]e|tasse|verre|sachet|bouquet|branche|feuille|citron|oignon)\b(?!s))/i, '½ ');
 // combien de « quantité + ingrédient » dans un texte (« 1 citron vert », « 4 cuil. à soupe… »)
 const nbQuantites = (t: string) => (t.match(new RegExp(`(?:^|\\s)\\d+(?:[,.]\\d+)?\\s?${UNITE}(?![a-zà-ÿœ])`, 'gi')) ?? []).length;
@@ -185,7 +188,8 @@ export function assembler(blocs: Bloc[]) {
     // la ligne précédente allait jusqu'au bout de la colonne : elle était coupée
     const pleine = i > 0 && b.lignes[i - 1].length >= 0.95 * Math.max(...b.lignes.map(x => x.length));
     const suite = i > 0 && prec != null && !/^[-–•*·°»+]/.test(brut)
-      && ((pleine && /^[a-zà-ÿ(]/.test(l) && !lireQuantite(l)) || /(\s(de|d[’']|à|au|aux|et|avec|ou|en)|,)$/i.test(prec));
+      && ((pleine && /^[a-zà-ÿ(]/.test(l) && !lireQuantite(l)) || /(\s(de|d[’']|à|au|aux|et|avec|ou|en|environ)|,)$/i.test(prec)
+      || (/^(de|d[’']|du|des)\s?[a-zà-ÿ]/.test(l) && !lireQuantite(l)));
     if (suite) ingredients[ingredients.length - 1] += ' ' + l;
     else ingredients.push(l);
   }
@@ -203,7 +207,14 @@ export function assembler(blocs: Bloc[]) {
   }
   // en plus, une numérotation (1. 2. / Étape 3) à l'intérieur d'un bloc découpe ce bloc
   const numerote = blocsEtapes.join(' ').match(new RegExp(NUM.source, 'g'))?.length ?? 0;
-  const etapes = blocsEtapes.flatMap(t => numerote >= 2 ? t.split(NUM) : [t])
+  // recette numérotée : un bloc sans numéro est la suite de l'étape précédente (« Servez avec… » passé à la ligne),
+  // un numéro mal lu après une fin de phrase (« ciselez-les. ki. Préparez ») coupe aussi
+  const LOUCHE = /(?<=[.!)]\s)(?=[A-Za-zà-ÿ%]{1,2}\s?[.)]\s+[A-ZÀ-Ý][a-zà-ÿ])/;
+  const parNumero = (t: string) => t.split(NUM).flatMap(m => m.split(LOUCHE));
+  const etapes = (numerote >= 2 ? blocsEtapes.reduce<string[]>((acc, t) => {
+    if (acc.length && !/^(?:[ÉEée]tape\s*\d{1,2}\b|\d{1,2}\s*[.)/])/.test(t) && !NUM_LU.test(t)) acc[acc.length - 1] += ' ' + t; else acc.push(t);
+    return acc;
+  }, []).flatMap(parNumero) : blocsEtapes)
     .map(m => m.replace(/^[^\sA-Za-zÀ-ÿ]{0,2}[A-Za-z%]{0,2}\s*[.)]\s+(?=[A-ZÀ-Ý])/, '').replace(/^[^A-Za-zÀ-ÿ0-9]+\s*(?=[A-ZÀ-Ý])/, '')) // numéro d'étape mal lu : « T. », « %. », « ka. »
     .map(m => m.replace(/^[ée]tape\s*\d{1,2}\s*[:.)-]?\s*/i, '').replace(/^\d{1,2}\s*[.)/]\s*/, '').replace(/^\d{1,2}\s+(?=[A-ZÀ-Ý])/, '').trim()).filter(m => m.length > 1);
   return { titre, ingredients, etapes };
@@ -218,7 +229,10 @@ export function qualite(p: Paragraphe[]): number {
   const ing = a.ingredients, et = a.etapes;
   const avecQte = ing.filter(l => l.length <= 55 && !!lireQuantite(l)).length;
   const bonsIng = avecQte + ing.filter(l => !lireQuantite(l) && l.split(' ').length <= 3 && l !== l.toUpperCase()).length;
-  const bonnesEt = et.filter(e => e.length >= 25 && e.length <= 700 && /[a-zà-ÿ]/.test(e)).length;
+  // une étape mêlée à une autre colonne (encadré « CONSEIL » lu en travers) : mot en capitales au milieu,
+  // ou phrase qui reprend en minuscule après un point
+  const melee = (e: string) => /\s[A-ZÀ-Ý]{4,}\s/.test(e) || /[a-zà-ÿ]{3}[.!]\s+[a-zà-ÿ]{2,}/.test(e);
+  const bonnesEt = et.filter(e => e.length >= 25 && e.length <= 700 && /[a-zà-ÿ]/.test(e) && !melee(e)).length;
   let n = 0;
   if (ing.length) n += 0.45 * (bonsIng / ing.length) * Math.min(1, avecQte / 3);
   if (et.length) n += 0.45 * (bonnesEt / et.length) * Math.min(1, et.length / 2);
@@ -229,6 +243,47 @@ export function qualite(p: Paragraphe[]): number {
   n -= 0.03 * ing.filter(l => nbQuantites(l) >= 2 || /\bà soupe\b.*\bà soupe\b/.test(l)).length;
   n -= 0.03 * et.filter(e => /^[a-zà-ÿ]/.test(e) || /\s[•*®©«»]\s|\s[•*®©«»]$/.test(e) || nbQuantites(e) >= 2 && !/[.!]$/.test(e)).length;
   return n;
+}
+
+// Choix parmi les lectures d'une photo (plusieurs passages, plusieurs mises en page) : la mieux notée.
+// Le titre est choisi à part, par vote entre les lectures : les titres en très gros caractères sont souvent
+// mal lus ou oubliés par la meilleure lecture (lus seulement sur la photo réduite, ou en « texte épars »).
+// Un titre de livre est en capitales : on vote d'abord entre titres en capitales, le plus souvent lu
+// puis le plus long l'emporte.
+export function choisirFiche(essais: Paragraphe[][]): Paragraphe[] {
+  const lectures = essais.filter(p => !(p.length === 1 && p[0].groupe === -2));
+  // la fiche vient des lectures en grand ; celles de la photo réduite (« petite ») ne votent que pour le titre et les infos
+  const grandes = lectures.filter(p => !('petite' in p));
+  const notes = (grandes.length ? grandes : lectures).map(p => ({ p, n: qualite(p) })).sort((a, b) => b.n - a.n);
+  // portions et temps manquants : repris de la mieux notée des autres lectures qui les a lus
+  const infos = analyser(notes[0]?.p ?? []).infos;
+  for (const p of lectures) {
+    const i = analyser(p).infos;
+    infos.portions ??= i.portions; infos.preparationMin ??= i.preparationMin; infos.cuissonMin ??= i.cuissonMin;
+  }
+  const lignesInfos = [
+    infos.portions && `Pour ${infos.portions} personnes`,
+    infos.preparationMin && `Préparation : ${infos.preparationMin} min`,
+    infos.cuissonMin && `Cuisson : ${infos.cuissonMin} min`,
+  ].filter((l): l is string => !!l);
+  const enTete: Paragraphe[] = lignesInfos.length ? [{ lignes: lignesInfos, hauteur: 1, haut: -1, gauche: 0, groupe: -1 }] : [];
+  const meilleure = [...enTete, ...(notes[0]?.p ?? [])];
+  const voix = new Map<string, number>();
+  const voter = (t: string) => { if ((t.match(/[a-zà-ÿ]/gi)?.length ?? 0) >= 5) voix.set(t, (voix.get(t) ?? 0) + 1); };
+  for (const p of lectures) voter(analyser(p).blocs.filter(b => b.role === 'titre').flatMap(b => b.lignes).join(' ').replace(/\s+/g, ' ').trim());
+  const capitales = [...voix].filter(([t]) => t === t.toUpperCase());
+  const epars = essais.find(p => p.length === 1 && p[0].groupe === -2)?.[0].lignes.join(' ');
+  const aDejaTitre = assembler(analyser(meilleure).blocs).titre.length >= 5;
+  if (!capitales.length && epars && !aDejaTitre) capitales.push([epars, 1]);
+  // un titre lu en entier compte aussi les voix des lectures qui n'en ont lu qu'un morceau
+  const total = (t: string) => capitales.reduce((n, [u, v]) => n + (t.toLowerCase().includes(u.toLowerCase()) ? v : 0), 0);
+  const elu = capitales.map(([t]) => [t, total(t)] as const).sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0]?.[0];
+  if (!elu) return meilleure;
+  // on remplace le titre de la meilleure lecture par le titre élu
+  const anciens = new Set(analyser(meilleure).blocs.filter(b => b.role === 'titre').flatMap(b => b.lignes));
+  const reste = meilleure.filter(p => !p.lignes.every(l => anciens.has(l)));
+  const h = Math.max(...reste.map(x => x.hauteur), 0) * 2 + 1;
+  return [{ lignes: [elu], hauteur: h, haut: -1, gauche: 0, groupe: -1 }, ...reste];
 }
 
 // Ingrédients qu'une autre bonne lecture de la même photo a trouvés et qui manquent à la lecture retenue
@@ -255,7 +310,9 @@ export function ingredientsManquants(retenue: Paragraphe[], autres: Paragraphe[]
       const mots = normaliser(l).split(' ').filter(m => m.length >= 4 && !['cuil', 'soupe', 'cafe', 'cuillere'].includes(m));
       // un ingrédient n'est ni une phrase (« …Réserver. »), ni une étape numérotée, ni un début de consigne (« Saler, … »)
       const propre = l.length <= 55 && nbQuantites(l) <= 1 && !/[•*®©«»]/.test(l) && mots.length >= 1 && l !== l.toUpperCase()
-        && !finDePhrase(l) && !/^\d{1,2}\s*[.)]/.test(l) && !/^[A-ZÀ-Ý][a-zà-ÿ]+(er|ez)\b/.test(l) && !/[.!]\s+[A-ZÀ-Ý]/.test(l);
+        && !finDePhrase(l) && !/^\d{1,2}\s*[.)]/.test(l)
+        // ni un morceau mal lu : début en minuscule, chiffres collés aux lettres (« 3cuilaseupegr »), plusieurs nombres, « .à »
+        && !/^[a-zà-ÿ]/.test(l) && !/\d[a-zà-ÿ]{3,}/i.test(l) && (l.match(/\d+/g) ?? []).length <= 1 && !/\s\.\S/.test(l) && !/^[A-ZÀ-Ý][a-zà-ÿ]+(er|ez)\b/.test(l) && !/[.!]\s+[A-ZÀ-Ý]/.test(l);
       const connu = [...deja, ...ajouts].some(d => ressemblance(d, l) >= 0.75 || normaliser(l).startsWith(normaliser(d)) || normaliser(d).includes(normaliser(l)));
       if (propre && !connu) ajouts.push(l);
     }
