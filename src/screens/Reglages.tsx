@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../store';
-import { Compteur, toast } from '../ui';
+import { Compteur, Feuille, toast } from '../ui';
 import { demanderPersistance, type Sauvegarde } from '../db';
 import Suggestions from '../Suggestions';
+import { fusionner } from '../lib/fusion';
 
 export default function Reglages() {
   const { reglages, modifierReglages, recettes, planning, importer, prix } = useStore();
@@ -12,20 +13,40 @@ export default function Reglages() {
 
   const renommer = (i: number, v: string) => { const t = reglages.thematiques.slice(); t[i] = v; modifierReglages({ thematiques: t }); };
 
+  const sauvegarde = (): Sauvegarde => ({ version: 1, date: new Date().toISOString(), recettes, planning, reglages, prix });
+  const nomFichier = () => `recettes-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`;
   const exporter = () => {
-    const s: Sauvegarde = { version: 1, date: new Date().toISOString(), recettes, planning, reglages, prix };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(s)], { type: 'application/json' }));
-    const a = document.createElement('a'); a.href = url; a.download = `recettes-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+    const url = URL.createObjectURL(new Blob([JSON.stringify(sauvegarde())], { type: 'application/json' }));
+    const a = document.createElement('a'); a.href = url; a.download = nomFichier(); a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  const restaurer = async (f?: File) => {
+  // Envoi du fichier par message (WhatsApp, SMS, mail…) grâce au partage d'Android ; sinon téléchargement
+  const partager = async () => {
+    const f = new File([JSON.stringify(sauvegarde())], nomFichier(), { type: 'application/json' });
+    if (navigator.canShare?.({ files: [f] })) {
+      try { await navigator.share({ files: [f], title: 'Mes recettes', text: 'Mes recettes : ouvrez l’appli, Réglages, « Importer des données », puis choisissez ce fichier.' }); }
+      catch { /* partage annulé */ }
+    } else { exporter(); toast('Fichier téléchargé : envoyez-le par message'); }
+  };
+
+  const [recu, setRecu] = useState<Sauvegarde | null>(null);
+  const lireFichier = async (f?: File) => {
     if (!f) return;
     try {
       const s = JSON.parse(await f.text()) as Sauvegarde;
       if (s.version !== 1 || !Array.isArray(s.recettes)) throw new Error();
-      if (!confirm(`Remplacer vos ${recettes.length} recettes et votre planning par cette sauvegarde (${s.recettes.length} recettes) ?`)) return;
-      await importer(s); toast('Sauvegarde restaurée');
+      setRecu(s);
     } catch { toast('Ce fichier n’est pas une sauvegarde de l’appli'); }
+  };
+  const remplacer = async () => {
+    if (!recu) return;
+    await importer(recu); setRecu(null); toast('Données remplacées');
+  };
+  const fusion = async () => {
+    if (!recu) return;
+    const { s, bilan } = fusionner(sauvegarde(), recu);
+    await importer(s); setRecu(null);
+    toast(`${bilan.ajoutees} recette${bilan.ajoutees > 1 ? 's' : ''} ajoutée${bilan.ajoutees > 1 ? 's' : ''}, ${bilan.repas} repas, ${bilan.prix} prix`);
   };
 
   return (
@@ -59,12 +80,24 @@ export default function Reglages() {
       <div className="carte">
         <h2>Sauvegarde</h2>
         <p className="doux petit" style={{ marginTop: 0 }}>Les recettes sont enregistrées sur ce téléphone ({recettes.length} recettes, données {persist}). La sauvegarde en ligne automatique arrive avec la mise en ligne. En attendant, gardez une copie de temps en temps.</p>
+        <button className="btn principal plein" style={{ marginBottom: 8 }} onClick={partager}>Partager mes données</button>
+        <p className="doux petit" style={{ marginTop: 0 }}>Envoie un fichier par message à l’autre personne. Elle l’ouvre ici avec « Importer des données ».</p>
         <div className="deux">
           <button className="btn" onClick={exporter}>Exporter</button>
-          <label className="btn" style={{ position: 'relative' }}>Restaurer<input type="file" accept="application/json,.json" style={{ position: 'absolute', inset: 0, opacity: 0 }} onChange={e => restaurer(e.target.files?.[0])} /></label>
+          <label className="btn" style={{ position: 'relative' }}>Importer des données<input type="file" accept="application/json,.json" style={{ position: 'absolute', inset: 0, opacity: 0 }} onChange={e => { lireFichier(e.target.files?.[0]); e.target.value = ''; }} /></label>
         </div>
         {persist === 'non protégées' && <button className="lien" onClick={async () => { const r = await demanderPersistance(); setPersist(r === 'accorde' ? 'protégées' : 'non protégées'); toast(r === 'accorde' ? 'Données protégées' : 'Android protégera les données une fois l’appli installée'); }}>Protéger les données</button>}
       </div>
+
+      {recu && (
+        <Feuille titre="Importer des données" sousTitre={`Fichier du ${new Date(recu.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })} : ${recu.recettes.length} recettes.`} onFermer={() => setRecu(null)}>
+          <button className="btn principal plein" style={{ marginBottom: 4 }} onClick={fusion}>Fusionner</button>
+          <p className="doux petit" style={{ marginTop: 0 }}>Ajoute les recettes, repas et prix qui manquent ici. Rien n’est effacé, pas de doublon.</p>
+          <button className="btn danger plein" style={{ marginBottom: 4 }} onClick={() => confirm(`Effacer vos ${recettes.length} recettes et votre planning pour les remplacer par ce fichier ?`) && remplacer()}>Remplacer</button>
+          <p className="doux petit" style={{ marginTop: 0 }}>Efface les données de ce téléphone et met celles du fichier à la place.</p>
+          <button className="btn plein" onClick={() => setRecu(null)}>Annuler</button>
+        </Feuille>
+      )}
 
       <p className="doux petit" style={{ textAlign: 'center' }}>Version 0.2 · phase 2 · DA provisoire</p>
     </div>
