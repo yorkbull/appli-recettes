@@ -6,6 +6,9 @@ import { aller } from '../App';
 import { cout } from '../lib/prix';
 import { ResumeCout } from '../Prix';
 
+// Nom du site d'origine ; une adresse mal formée (fichier reçu, ancienne version) ne doit pas faire planter la fiche
+const nomSite = (url: string) => { try { return new URL(url).hostname; } catch { return url; } };
+
 export default function Fiche({ id }: { id: string }) {
   const { parId, enregistrerRecette, supprimerRecette, prix } = useStore();
   const r = parId[id];
@@ -71,7 +74,7 @@ export default function Fiche({ id }: { id: string }) {
         <button className="btn" onClick={ajouterNote} disabled={!note.trim()}>Ajouter l’annotation</button>
       </section>
 
-      {r.source?.url && <p className="petit doux">Source : <a href={r.source.url} target="_blank" rel="noreferrer">{new URL(r.source.url).hostname}</a></p>}
+      {r.source?.url && <p className="petit doux">Source : <a href={r.source.url} target="_blank" rel="noreferrer">{nomSite(r.source.url)}</a></p>}
 
       <section className="section">
         <h2>Coût</h2>

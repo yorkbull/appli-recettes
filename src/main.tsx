@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
+import Erreur from './Erreur';
 import { StoreProvider } from './store';
 import { demanderPersistance } from './db';
 
@@ -21,8 +22,10 @@ if (matchMedia('(display-mode: standalone)').matches) demanderPersistance().catc
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <StoreProvider>
-      <App />
-    </StoreProvider>
+    <Erreur>
+      <StoreProvider>
+        <App />
+      </StoreProvider>
+    </Erreur>
   </StrictMode>,
 );

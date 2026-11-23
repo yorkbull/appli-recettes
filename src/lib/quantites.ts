@@ -37,7 +37,24 @@ export function ajusterLigne(ligne: string, facteur: number): string {
   const mesure = /^\s*(kg|g|gr|grammes?|kilos?|l|litres?|dl|cl|ml|c\.|cuill|cs|cc|cas|cac|càs|càc)\b/i.test(ligne.slice(q.fin));
   const f = (x: number) => mesure ? formater(x * facteur) : formater(x * facteur >= 3 ? Math.round(x * facteur) : Math.max(0.5, Math.ceil(x * facteur * 2 - 1e-9) / 2));
   const txt = q.max != null ? `${f(q.v)} à ${f(q.max)}` : f(q.v);
-  return debut + txt + ligne.slice(q.fin);
+  const nouvelle = q.max ?? q.v;
+  const v = mesure ? nouvelle * facteur : nouvelle * facteur >= 3 ? Math.round(nouvelle * facteur) : Math.max(0.5, Math.ceil(nouvelle * facteur * 2 - 1e-9) / 2);
+  return debut + txt + accorder(ligne.slice(q.fin), v, mesure);
+}
+
+// Accord du mot qui suit la quantité : « 3 pincées de sel », « 1 oignon » (et non « 3 pincée », « 1 oignons »)
+const INVARIABLES = new Set(['ananas', 'radis', 'pois', 'anchois', 'cassis', 'jus', 'mais', 'maïs', 'frais', 'gras', 'dos', 'bras', 'brebis', 'souris', 'colis', 'tapas']);
+function accorder(suite: string, v: number, mesure: boolean): string {
+  if (mesure) return suite;
+  const m = suite.match(/^(\s+)([a-zà-ÿœæ]+)(?![a-zà-ÿœæ.’'])/i);
+  if (!m) return suite;
+  const mot = m[2], bas = mot.toLowerCase();
+  if (bas.length < 3 || INVARIABLES.has(bas) || /^(de|du|des|d|à|a|et|ou|la|le|les|en)$/.test(bas)) return suite;
+  let accorde = mot;
+  if (v > 1 && !/[sxz]$/i.test(mot)) accorde = /(eau|eu)$/i.test(mot) ? mot + 'x' : mot + 's';
+  else if (v <= 1 && /eaux$/i.test(mot)) accorde = mot.slice(0, -1);
+  else if (v <= 1 && /[^s]s$/i.test(mot) && bas.length > 3) accorde = mot.slice(0, -1);
+  return m[1] + accorde + suite.slice(m[0].length);
 }
 
 // Minuteurs : « 20 min », « 1 h 30 », « 45 minutes », « 2 heures »

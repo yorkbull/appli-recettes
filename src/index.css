@@ -101,6 +101,7 @@ img { display: block; max-width: 100%; }
 .etiquette { display: inline-block; font-size: .75rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--texte-doux); }
 .etiquette.restes { background: #e7efe4; color: var(--ok); }
 .carte-suivante { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 18px; border-radius: var(--rayon); border: 2px dashed var(--ligne); background: none; font-weight: 600; text-align: left; }
+.carte-suivante svg { width: 24px; height: 24px; flex: none; }
 .bandeau { position: sticky; top: calc(var(--barre-h) + env(safe-area-inset-top)); z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; margin: -16px -16px 12px; background: var(--accent); color: var(--accent-texte); font-weight: 600; }
 .bandeau button { background: rgba(255,255,255,.2); border: 0; color: inherit; border-radius: 999px; padding: 8px 14px; font-weight: 600; }
 

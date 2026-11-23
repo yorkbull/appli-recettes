@@ -16,8 +16,20 @@ import Courses from './screens/Courses';
 export const aller = (chemin: string) => { location.hash = chemin; };
 const lireRoute = () => (location.hash.replace(/^#/, '') || '/semaine').split('?')[0].split('/').filter(Boolean);
 
+// Nom lisible de l'écran, pour le bouton Remarque : « Fiche « Croque-monsieur » » plutôt que « #/recette/b446… »
+const NOMS: Record<string, string> = { semaine: 'Semaine', mois: 'Mois', recettes: 'Mes recettes', courses: 'Courses', batch: 'Batch cooking', reglages: 'Réglages' };
+function nomEcran(hash: string, titreDe: (id: string) => string | undefined): string {
+  const [ecran, id] = (hash.replace(/^#/, '') || '/semaine').split('?')[0].split('/').filter(Boolean);
+  const titre = id ? titreDe(id) : undefined;
+  const avec = (nom: string) => titre ? `${nom} « ${titre} »` : nom;
+  if (ecran === 'recette') return avec('Fiche');
+  if (ecran === 'cuisine') return avec('Mode cuisine');
+  if (ecran === 'editer') return id === 'nouvelle' ? 'Nouvelle recette' : avec('Modifier la recette');
+  return NOMS[ecran] ?? 'Semaine';
+}
+
 export default function App() {
-  const { pret, reglages } = useStore();
+  const { pret, reglages, parId } = useStore();
   const [route, setRoute] = useState(lireRoute);
   // Bouton Remarque : écran en cours au moment de l'appui (null = feuille fermée)
   const [remarque, setRemarque] = useState<string | null>(null);
@@ -35,7 +47,7 @@ export default function App() {
   switch (ecran) {
     case 'mois': contenu = <Mois />; break;
     case 'recettes': contenu = <Recettes />; break;
-    case 'recette': contenu = <Fiche id={id} />; break;
+    case 'recette': contenu = <Fiche key={id} id={id} />; break;
     case 'editer': contenu = <Editer id={id} />; break;
     case 'cuisine': return <Cuisine id={id} />;
     case 'reglages': contenu = <ReglagesEcran />; break;
@@ -63,8 +75,8 @@ export default function App() {
         <a href="#/batch" className={onglet === 'batch' ? 'actif' : ''}>{Icone.batch}Batch cooking</a>
       </nav>
       {remarque && (
-        <Feuille titre="Remarque" sousTitre={`Sur l’écran ${remarque}`} onFermer={() => setRemarque(null)}>
-          <Suggestions ecran={remarque} />
+        <Feuille titre="Remarque" sousTitre={`Sur l’écran ${nomEcran(remarque, id => parId[id]?.titre)}`} onFermer={() => setRemarque(null)}>
+          <Suggestions ecran={`${nomEcran(remarque, id => parId[id]?.titre)} (${remarque})`} />
         </Feuille>
       )}
       <Toasts />
