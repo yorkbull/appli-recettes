@@ -1,4 +1,4 @@
-// Sauvegarde automatique : une copie par jour des recettes, des menus du planning, des prix et des réglages,
+// Sauvegarde automatique : des copies régulières des recettes, des menus du planning, des prix et des réglages,
 // gardée sur le téléphone pendant 30 jours. Sert à revenir en arrière après une erreur (case vidée, recette effacée…).
 // Les photos ne sont pas copiées (trop lourdes) : à la restauration, on reprend celles encore présentes.
 import * as db from '../db';
@@ -11,12 +11,25 @@ const JOURS = 30;
 
 export const lireHistorique = async () => (await db.lire<Instantane[]>(CLE)) ?? [];
 
+// Aujourd'hui : une copie après chaque changement (les 30 dernières), pour annuler une erreur du jour.
+// Les jours précédents : la dernière copie de chaque jour, pendant 30 jours.
+const PAR_JOUR = 30;
+const contenu = (s: db.Sauvegarde) => JSON.stringify([s.recettes, s.planning, s.prix ?? {}, s.reglages]);
+
 export async function garderCopie(s: db.Sauvegarde) {
   const jour = aujourdhui();
   const sansPhotos = { ...s, recettes: s.recettes.map(r => ({ ...r, photo: undefined })) };
-  const h = (await lireHistorique()).filter(i => i.jour !== jour);
-  h.unshift({ jour, heure: new Date().toISOString(), s: sansPhotos });
-  await db.ecrire(CLE, h.sort((a, b) => b.jour.localeCompare(a.jour)).slice(0, JOURS));
+  const tout = (await lireHistorique()).sort((a, b) => b.heure.localeCompare(a.heure));
+  if (tout[0] && contenu(tout[0].s) === contenu(sansPhotos)) return; // rien n'a changé depuis la dernière copie
+  tout.unshift({ jour, heure: new Date().toISOString(), s: sansPhotos });
+  let duJour = 0;
+  const vus = new Set<string>();
+  const garde = tout.filter(i => {
+    if (i.jour === jour) return ++duJour <= PAR_JOUR;
+    if (vus.has(i.jour)) return false;
+    vus.add(i.jour); return vus.size <= JOURS;
+  });
+  await db.ecrire(CLE, garde);
 }
 
 // Remet une copie en reprenant les photos des recettes encore présentes sur le téléphone

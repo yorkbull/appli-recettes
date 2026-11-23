@@ -55,10 +55,11 @@ export default function Reglages() {
   const [avantRetour, setAvantRetour] = useState<Instantane | null>(null);
   const ouvrirHistorique = async () => { setAvantRetour(await lireAvantRetour()); setHistorique(await lireHistorique()); };
   const jourLisible = (jour: string) => new Date(jour + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const quand = (i: Instantane) => `${jourLisible(i.jour)}, ${new Date(i.heure).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
   const restaurer = async (i: Instantane) => {
-    if (!confirm(`Revenir aux recettes et au planning du ${jourLisible(i.jour)} ? Ce qui a été fait depuis sera remplacé.`)) return;
+    if (!confirm(`Revenir aux recettes et au planning du ${quand(i)} ? Ce qui a été fait depuis sera remplacé.`)) return;
     await garderAvantRetour(sauvegarde());
-    await importer(avecPhotos(i.s, parId)); setHistorique(null); toast('Données du ' + jourLisible(i.jour) + ' remises');
+    await importer(avecPhotos(i.s, parId)); setHistorique(null); toast(`Données du ${quand(i)} remises`);
   };
   const annulerRetour = async () => {
     if (!avantRetour || !confirm('Annuler le dernier retour en arrière et retrouver les données d’avant ?')) return;
@@ -95,7 +96,7 @@ export default function Reglages() {
 
       <div className="carte">
         <h2>Sauvegarde</h2>
-        <p className="doux petit" style={{ marginTop: 0 }}>Tout est enregistré sur ce téléphone ({recettes.length} recettes, {nbRepas({ version: 1, date: '', recettes, planning, reglages })} repas au planning, données {persist}). Chaque jour, l’appli garde aussi une copie automatique des recettes et des menus pendant 30 jours.</p>
+        <p className="doux petit" style={{ marginTop: 0 }}>Tout est enregistré sur ce téléphone ({recettes.length} recettes, {nbRepas({ version: 1, date: '', recettes, planning, reglages })} repas au planning, données {persist}). L’appli garde aussi des copies automatiques des recettes et des menus pendant 30 jours.</p>
         <button className="btn plein" style={{ marginBottom: 8 }} onClick={ouvrirHistorique}>Sauvegardes automatiques</button>
         <button className="btn principal plein" style={{ marginBottom: 8 }} onClick={partager}>Partager mes données</button>
         <p className="doux petit" style={{ marginTop: 0 }}>Envoie un fichier par message à l’autre personne, qui l’ouvre ici avec « Importer des données ». Pour garder une copie hors du téléphone, choisissez Google Drive dans la liste.</p>
@@ -117,13 +118,13 @@ export default function Reglages() {
       )}
 
       {historique && (
-        <Feuille titre="Sauvegardes automatiques" sousTitre="Une copie par jour des recettes, des menus et des prix, gardée 30 jours sur ce téléphone." onFermer={() => setHistorique(null)}>
+        <Feuille titre="Sauvegardes automatiques" sousTitre="Copies des recettes, des menus et des prix : après chaque changement aujourd’hui, puis une par jour pendant 30 jours." onFermer={() => setHistorique(null)}>
           {avantRetour && <button className="lien" onClick={annulerRetour}>Annuler le dernier retour en arrière</button>}
           {!historique.length && <p className="doux">Pas encore de copie : elle se fait quelques secondes après un changement.</p>}
           {historique.map(i => (
-            <div key={i.jour} className="ligne-reglage">
-              <span style={{ flex: 1 }}><b style={{ textTransform: 'capitalize' }}>{jourLisible(i.jour)}</b><br /><span className="doux petit">{i.s.recettes.length} recettes · {nbRepas(i.s)} repas</span></span>
-              <button className="btn" onClick={() => restaurer(i)}>Revenir à ce jour</button>
+            <div key={i.heure} className="ligne-reglage">
+              <span style={{ flex: 1 }}><b>{quand(i).replace(/^./, c => c.toUpperCase())}</b><br /><span className="doux petit">{i.s.recettes.length} recettes · {nbRepas(i.s)} repas</span></span>
+              <button className="btn" onClick={() => restaurer(i)}>Revenir ici</button>
             </div>
           ))}
           <button className="btn plein" style={{ marginTop: 8 }} onClick={() => setHistorique(null)}>Fermer</button>
