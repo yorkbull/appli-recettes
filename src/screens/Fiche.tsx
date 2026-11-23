@@ -5,6 +5,7 @@ import { Compteur, Icone, toast } from '../ui';
 import { aller } from '../App';
 import { cout } from '../lib/prix';
 import { ResumeCout } from '../Prix';
+import { nutrition } from '../lib/nutrition';
 
 // Nom du site d'origine ; une adresse mal formée (fichier reçu, ancienne version) ne doit pas faire planter la fiche
 const nomSite = (url: string) => { try { return new URL(url).hostname; } catch { return url; } };
@@ -83,10 +84,24 @@ export default function Fiche({ id }: { id: string }) {
 
       <section className="section">
         <h2>Calories et nutriments</h2>
-        <div className="nutrition">Le calcul des calories et des nutriments par portion arrive avec la phase 3 (base Ciqual).</div>
+        <Nutriments ingredients={r.ingredients} portions={r.portions || 1} />
       </section>
 
       <button className="btn danger plein" onClick={async () => { if (confirm(`Supprimer « ${r.titre} » ? Elle sera aussi retirée du planning.`)) { await supprimerRecette(r.id); toast('Recette supprimée'); aller('/recettes'); } }}>Supprimer la recette</button>
     </article>
+  );
+}
+
+// Calories et nutriments d'une portion (valeurs moyennes, à titre indicatif)
+function Nutriments({ ingredients, portions }: { ingredients: string[]; portions: number }) {
+  const n = nutrition(ingredients);
+  if (!n.comptes) return <div className="nutrition">Ajoutez les ingrédients avec leurs quantités pour estimer les calories.</div>;
+  const g = (v: number) => `${Math.round(v / portions)} g`;
+  return (
+    <div className="nutrition">
+      <strong style={{ color: 'var(--texte)' }}>{n.nonComptes.length ? 'Au moins ' : 'Environ '}{Math.round(n.kcal / portions / 10) * 10} kcal</strong> par portion
+      <br />Protéines {g(n.prot)} · Glucides {g(n.gluc)} · Lipides {g(n.lip)}
+      <br /><span className="petit">Valeurs moyennes (table Ciqual), à titre indicatif.{n.nonComptes.length ? ` Non comptés : ${n.nonComptes.join(', ')}.` : ''}</span>
+    </div>
   );
 }
