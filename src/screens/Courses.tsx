@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store';
 import { ajouterJours, aujourdhui, joursSemaine, lundi, titreSemaine } from '../lib/dates';
-import { lignesPrevues, listeCourses, RAYONS, texteCourses } from '../lib/courses';
+import { cleDe, lignesPrevues, listeCourses, rayonDe, RAYONS, texteCourses, type Article } from '../lib/courses';
 import { cout } from '../lib/prix';
 import { ResumeCout } from '../Prix';
 import { Icone, toast } from '../ui';
@@ -19,7 +19,25 @@ export default function Courses() {
     setCoches(n); localStorage.setItem(cleCoches, JSON.stringify(n));
   };
 
-  const { articles, recettes } = useMemo(() => listeCourses(joursSemaine(debut), planning, parId), [debut, planning, parId]);
+  // Articles ajoutés à la main (café, lessive…), gardés pour la semaine affichée
+  const cleLibres = `courses-libres-${debut}`;
+  const [libres, setLibres] = useState<string[]>([]);
+  const [nouveau, setNouveau] = useState('');
+  useEffect(() => { setLibres(JSON.parse(localStorage.getItem(cleLibres) ?? '[]')); }, [cleLibres]);
+  const changerLibres = (n: string[]) => { setLibres(n); localStorage.setItem(cleLibres, JSON.stringify(n)); };
+  const ajouterLibre = () => {
+    const nom = nouveau.trim().replace(/^./, c => c.toUpperCase());
+    if (!nom) return;
+    if (!libres.some(l => cleDe(l) === cleDe(nom))) changerLibres([...libres, nom]);
+    setNouveau('');
+  };
+
+  const prevus = useMemo(() => listeCourses(joursSemaine(debut), planning, parId), [debut, planning, parId]);
+  const recettes = prevus.recettes;
+  const articles: Article[] = useMemo(() => [
+    ...prevus.articles,
+    ...libres.map(nom => ({ cle: 'libre:' + cleDe(nom), nom, quantite: '', rayon: rayonDe(nom), libre: true })),
+  ].sort((a, b) => a.nom.localeCompare(b.nom, 'fr')), [prevus, libres]);
   const coutSemaine = useMemo(() => cout(lignesPrevues(joursSemaine(debut), planning, parId), prix), [debut, planning, parId, prix]);
   const aAcheter = articles.filter(a => !coches.includes(a.cle));
   const titre = `Courses ${titreSemaine(debut)}`;
@@ -45,14 +63,21 @@ export default function Courses() {
         <button className="icone" aria-label="Semaine suivante" onClick={() => setDebut(ajouterJours(debut, 7))}>{Icone.avant}</button>
       </div>
 
-      {!articles.length ? (
-        <div className="vide-etat">
+      {!recettes.length && (
+        <div className="vide-etat" style={{ paddingTop: 8, paddingBottom: 8 }}>
           <p>Aucun repas avec une recette n’est prévu cette semaine.</p>
           <a className="btn" href="#/semaine">Planifier la semaine</a>
         </div>
-      ) : <>
+      )}
+
+      <form className="ligne-reglage" style={{ borderBottom: 0, marginBottom: 8 }} onSubmit={e => { e.preventDefault(); ajouterLibre(); }}>
+        <input type="text" placeholder="Ajouter un article (café, lessive…)" aria-label="Ajouter un article à la liste" value={nouveau} onChange={e => setNouveau(e.target.value)} />
+        <button className="btn" type="submit" disabled={!nouveau.trim()}>Ajouter</button>
+      </form>
+
+      {articles.length > 0 && <>
         <p className="doux petit" style={{ marginTop: 0 }}>
-          Pour {recettes.length} recette{recettes.length > 1 ? 's' : ''} : {recettes.join(', ')}. Cochez ce que vous avez déjà ou ce qui est acheté.
+          {recettes.length > 0 && <>Pour {recettes.length} recette{recettes.length > 1 ? 's' : ''} : {recettes.join(', ')}. </>}Cochez ce que vous avez déjà ou ce qui est acheté.
         </p>
         <div className="deux" style={{ marginBottom: 6 }}>
           <button className="btn principal" disabled={!aAcheter.length} onClick={partager}>Partager</button>
@@ -73,6 +98,8 @@ export default function Courses() {
                   <input type="checkbox" checked={coches.includes(a.cle)} onChange={() => basculer(a.cle)} />
                   <span className="article-nom">{a.nom}</span>
                   {a.quantite && <span className="article-qte">{a.quantite}</span>}
+                  {a.libre && <button type="button" className="corbeille" aria-label={`Retirer ${a.nom} de la liste`}
+                    onClick={e => { e.preventDefault(); changerLibres(libres.filter(l => 'libre:' + cleDe(l) !== a.cle)); }}>{Icone.corbeille}</button>}
                 </label>
               ))}
             </section>
@@ -80,10 +107,12 @@ export default function Courses() {
         })}
         {coches.length > 0 && <button className="lien" onClick={() => { setCoches([]); localStorage.removeItem(cleCoches); }}>Tout décocher</button>}
 
-        <section className="carte">
-          <h2>Coût estimé de la semaine</h2>
-          <ResumeCout cout={coutSemaine} />
-        </section>
+        {recettes.length > 0 && (
+          <section className="carte">
+            <h2>Coût estimé de la semaine</h2>
+            <ResumeCout cout={coutSemaine} />
+          </section>
+        )}
       </>}
     </div>
   );

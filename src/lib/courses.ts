@@ -4,21 +4,30 @@ import type { Planning, Recette } from '../types';
 import { MOMENTS } from '../types';
 import { lireQuantite, formater } from './quantites';
 
-export type Rayon = 'fruits' | 'legumes' | 'viande' | 'autres';
+export type Rayon = 'fruits' | 'legumes' | 'viande' | 'cremerie' | 'boulangerie' | 'epicerie' | 'surgeles' | 'autres';
 export const RAYONS: { id: Rayon; titre: string }[] = [
   { id: 'fruits', titre: 'Fruits' },
   { id: 'legumes', titre: 'Légumes' },
   { id: 'viande', titre: 'Viande et poisson' },
+  { id: 'cremerie', titre: 'Crèmerie et frais' },
+  { id: 'boulangerie', titre: 'Boulangerie' },
+  { id: 'epicerie', titre: 'Épicerie' },
+  { id: 'surgeles', titre: 'Surgelés' },
   { id: 'autres', titre: 'Autres' },
 ];
 
-export interface Article { cle: string; nom: string; quantite: string; rayon: Rayon }
+export interface Article { cle: string; nom: string; quantite: string; rayon: Rayon; libre?: boolean }
 
-const sansAccent = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/œ/g, 'oe').toLowerCase();
+const sansAccent = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/œ/g, 'oe').toLowerCase();
 const contient = (nom: string, mots: string[]) => mots.some(m => new RegExp(`(^|[^a-z])${m}`).test(nom));
 
 // Mots-clés sans accents, au singulier (le pluriel est couvert : « carotte » trouve « carottes »)
-const NON_FRAIS = ['bouillon', 'fond de', 'cube', 'confiture', 'jus d', 'sirop', 'compote', 'sauce', 'puree d', 'concentre', 'noix de muscade', 'en poudre', 'seche'];
+const SURGELES = ['surgele', 'glace\\b', 'glaces\\b', 'frites'];
+// Produits d'épicerie qui contiennent un mot de fruit, de légume ou de crèmerie (« jus de citron », « lait de coco »)
+const EPICERIE_AVANT = ['bouillon', 'fond de', 'cube', 'confiture', 'jus d', 'sirop', 'compote', 'sauce', 'puree d', 'concentre', 'noix de muscade', 'en poudre', 'seche', 'lait de coco',
+  'chocolat', 'cacao', 'en conserve', 'en boite', 'pelee', 'coulis', 'huile', 'vinaigre', 'pate a tartiner', 'cornichon', 'olive', 'capre', 'raisins sec', 'fruits sec'];
+// Rayon frais : pâtes à dérouler (avant l'épicerie, pour ne pas les confondre avec les pâtes sèches)
+const FRAIS_AVANT = ['pate feuillet', 'pate bris', 'pate sabl', 'pate a pizza', 'pates fraiches', 'gnocchi', 'tofu', 'houmous', 'pesto'];
 const LEGUMES = ['pomme de terre', 'pommes de terre', 'patate', 'carotte', 'oignon', 'echalote', 'ail\\b', 'poireau', 'courgette', 'aubergine', 'poivron', 'tomate', 'salade', 'laitue', 'epinard',
   'chou', 'brocoli', 'haricot vert', 'haricots verts', 'petits pois', 'petit pois', 'champignon', 'concombre', 'radis', 'navet', 'betterave', 'celeri', 'fenouil', 'potiron', 'potimarron', 'courge',
   'butternut', 'asperge', 'artichaut', 'endive', 'mache', 'roquette', 'mais\\b', 'avocat', 'gingembre', 'piment', 'persil', 'ciboulette', 'basilic', 'coriandre', 'menthe', 'aneth', 'thym', 'romarin',
@@ -28,13 +37,25 @@ const FRUITS = ['pomme', 'banane', 'citron', 'orange', 'fraise', 'framboise', 'f
 const VIANDES = ['boeuf', 'veau', 'porc', 'poulet', 'dinde', 'canard', 'agneau', 'lardon', 'jambon', 'bacon', 'saucisse', 'saucisson', 'chorizo', 'steak', 'viande', 'hache', 'escalope', 'cote de',
   'roti', 'filet mignon', 'magret', 'merguez', 'chipolata', 'lapin', 'pintade', 'blanc de', 'cuisse', 'saumon', 'thon', 'cabillaud', 'colin', 'crevette', 'moule', 'poisson', 'sardine', 'maquereau',
   'truite', 'lieu\\b', 'dorade', 'bar\\b', 'gambas', 'calamar', 'saint-jacques', 'noix de saint', 'surimi', 'anchois', 'merlu', 'sole\\b', 'eglefin', 'haddock', 'lotte', 'crabe', 'homard'];
+const CREMERIE = ['lait', 'beurre', 'creme', 'yaourt', 'yogourt', 'oeuf', 'jaune', 'blanc d', 'fromage', 'emmental', 'gruyere', 'comte', 'parmesan', 'mozzarella', 'feta', 'chevre', 'camembert',
+  'roquefort', 'raclette', 'reblochon', 'ricotta', 'mascarpone', 'cheddar', 'brie', 'skyr', 'petit suisse', 'margarine', 'burrata', 'pecorino', 'tomme', 'boursin'];
+const BOULANGERIE = ['pain', 'baguette', 'brioche', 'croissant', 'tortilla', 'wrap', 'pita', 'biscotte', 'focaccia'];
+const EPICERIE = ['pate', 'spaghetti', 'tagliatelle', 'penne', 'macaroni', 'coquillette', 'fusilli', 'lasagne', 'nouille', 'vermicelle', 'riz', 'semoule', 'boulgour', 'quinoa', 'lentille',
+  'pois chiche', 'haricots rouges', 'haricots blancs', 'flocon', 'farine', 'maizena', 'fecule', 'chapelure', 'sucre', 'miel', 'levure', 'sel\\b', 'poivre', 'epice', 'paprika', 'cumin', 'curry',
+  'cannelle', 'muscade', 'herbes de provence', 'origan', 'laurier', 'vanille', 'amande', 'noisette', 'noix', 'pignon', 'cajou', 'cacahuete', 'graine', 'moutarde', 'mayonnaise', 'ketchup',
+  'soja', 'cafe', 'the\\b', 'cereale', 'biscuit', 'conserve', 'thon en boite', 'mais en', 'vin\\b', 'biere', 'eau\\b', 'gelatine', 'agar'];
 
 export function rayonDe(nom: string): Rayon {
   const n = sansAccent(nom);
-  if (contient(n, NON_FRAIS)) return 'autres';
+  if (contient(n, SURGELES)) return 'surgeles';
+  if (contient(n, FRAIS_AVANT)) return 'cremerie';
+  if (contient(n, EPICERIE_AVANT)) return 'epicerie';
   if (contient(n, VIANDES)) return 'viande';
   if (contient(n, LEGUMES)) return 'legumes'; // avant les fruits : « pomme de terre » n'est pas une pomme
   if (contient(n, FRUITS)) return 'fruits';
+  if (contient(n, CREMERIE)) return 'cremerie';
+  if (contient(n, BOULANGERIE)) return 'boulangerie';
+  if (contient(n, EPICERIE)) return 'epicerie';
   return 'autres';
 }
 
