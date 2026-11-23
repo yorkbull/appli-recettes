@@ -4,9 +4,10 @@ import { Compteur, Feuille, toast } from '../ui';
 import { demanderPersistance, type Sauvegarde } from '../db';
 import Suggestions from '../Suggestions';
 import { fusionner } from '../lib/fusion';
+import { avecPhotos, garderAvantRetour, lireAvantRetour, lireHistorique, nbRepas, type Instantane } from '../lib/historique';
 
 export default function Reglages() {
-  const { reglages, modifierReglages, recettes, planning, importer, prix } = useStore();
+  const { reglages, modifierReglages, recettes, planning, importer, prix, parId } = useStore();
   const [nouveau, setNouveau] = useState('');
   const [persist, setPersist] = useState<string>('…');
   useEffect(() => { navigator.storage?.persisted?.().then(p => setPersist(p ? 'protégées' : 'non protégées')).catch(() => setPersist('inconnu')); }, []);
@@ -49,6 +50,21 @@ export default function Reglages() {
     toast(`${bilan.ajoutees} recette${bilan.ajoutees > 1 ? 's' : ''} ajoutée${bilan.ajoutees > 1 ? 's' : ''}, ${bilan.repas} repas, ${bilan.prix} prix`);
   };
 
+  // Historique des copies automatiques
+  const [historique, setHistorique] = useState<Instantane[] | null>(null);
+  const [avantRetour, setAvantRetour] = useState<Instantane | null>(null);
+  const ouvrirHistorique = async () => { setAvantRetour(await lireAvantRetour()); setHistorique(await lireHistorique()); };
+  const jourLisible = (jour: string) => new Date(jour + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const restaurer = async (i: Instantane) => {
+    if (!confirm(`Revenir aux recettes et au planning du ${jourLisible(i.jour)} ? Ce qui a été fait depuis sera remplacé.`)) return;
+    await garderAvantRetour(sauvegarde());
+    await importer(avecPhotos(i.s, parId)); setHistorique(null); toast('Données du ' + jourLisible(i.jour) + ' remises');
+  };
+  const annulerRetour = async () => {
+    if (!avantRetour || !confirm('Annuler le dernier retour en arrière et retrouver les données d’avant ?')) return;
+    await importer(avecPhotos(avantRetour.s, parId)); setHistorique(null); toast('Retour en arrière annulé');
+  };
+
   return (
     <div className="page">
       <h1 style={{ marginBottom: 16 }}>Réglages</h1>
@@ -79,9 +95,10 @@ export default function Reglages() {
 
       <div className="carte">
         <h2>Sauvegarde</h2>
-        <p className="doux petit" style={{ marginTop: 0 }}>Les recettes sont enregistrées sur ce téléphone ({recettes.length} recettes, données {persist}). La sauvegarde en ligne automatique arrive avec la mise en ligne. En attendant, gardez une copie de temps en temps.</p>
+        <p className="doux petit" style={{ marginTop: 0 }}>Tout est enregistré sur ce téléphone ({recettes.length} recettes, {nbRepas({ version: 1, date: '', recettes, planning, reglages })} repas au planning, données {persist}). Chaque jour, l’appli garde aussi une copie automatique des recettes et des menus pendant 30 jours.</p>
+        <button className="btn plein" style={{ marginBottom: 8 }} onClick={ouvrirHistorique}>Sauvegardes automatiques</button>
         <button className="btn principal plein" style={{ marginBottom: 8 }} onClick={partager}>Partager mes données</button>
-        <p className="doux petit" style={{ marginTop: 0 }}>Envoie un fichier par message à l’autre personne. Elle l’ouvre ici avec « Importer des données ».</p>
+        <p className="doux petit" style={{ marginTop: 0 }}>Envoie un fichier par message à l’autre personne, qui l’ouvre ici avec « Importer des données ». Pour garder une copie hors du téléphone, choisissez Google Drive dans la liste.</p>
         <div className="deux">
           <button className="btn" onClick={exporter}>Exporter</button>
           <label className="btn" style={{ position: 'relative' }}>Importer des données<input type="file" accept="application/json,.json" style={{ position: 'absolute', inset: 0, opacity: 0 }} onChange={e => { lireFichier(e.target.files?.[0]); e.target.value = ''; }} /></label>
@@ -99,7 +116,21 @@ export default function Reglages() {
         </Feuille>
       )}
 
-      <p className="doux petit" style={{ textAlign: 'center' }}>Version 0.2 · phase 2 · DA provisoire</p>
+      {historique && (
+        <Feuille titre="Sauvegardes automatiques" sousTitre="Une copie par jour des recettes, des menus et des prix, gardée 30 jours sur ce téléphone." onFermer={() => setHistorique(null)}>
+          {avantRetour && <button className="lien" onClick={annulerRetour}>Annuler le dernier retour en arrière</button>}
+          {!historique.length && <p className="doux">Pas encore de copie : elle se fait quelques secondes après un changement.</p>}
+          {historique.map(i => (
+            <div key={i.jour} className="ligne-reglage">
+              <span style={{ flex: 1 }}><b style={{ textTransform: 'capitalize' }}>{jourLisible(i.jour)}</b><br /><span className="doux petit">{i.s.recettes.length} recettes · {nbRepas(i.s)} repas</span></span>
+              <button className="btn" onClick={() => restaurer(i)}>Revenir à ce jour</button>
+            </div>
+          ))}
+          <button className="btn plein" style={{ marginTop: 8 }} onClick={() => setHistorique(null)}>Fermer</button>
+        </Feuille>
+      )}
+
+      <p className="doux petit" style={{ textAlign: 'center' }}>Version 0.3 · DA provisoire</p>
     </div>
   );
 }

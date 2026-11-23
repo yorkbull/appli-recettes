@@ -17,8 +17,8 @@ if (p.has('lien') || p.has('texte') || p.has('titre')) {
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
-// Appli installée : on demande à Android de garder les données
-if (matchMedia('(display-mode: standalone)').matches) demanderPersistance().catch(() => {});
+// On demande à Android de garder les données (accordé surtout quand l'appli est installée)
+demanderPersistance().catch(() => {});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

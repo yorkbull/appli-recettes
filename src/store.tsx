@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import * as db from './db';
 import { REGLAGES_DEFAUT, type Case, type Moment, type Planning, type Prix, type Recette, type Reglages } from './types';
 import { ajouterJours, aujourdhui } from './lib/dates';
+import { garderCopie } from './lib/historique';
 
 export const nouvelId = () => (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36));
 
@@ -39,6 +40,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setPret(true);
     })().catch(e => { console.error(e); setPret(true); });
   }, []);
+
+  // Copie automatique du jour (recettes, menus, prix), quelques secondes après chaque changement
+  useEffect(() => {
+    if (!pret) return;
+    const t = window.setTimeout(() => {
+      garderCopie({ version: 1, date: new Date().toISOString(), recettes, planning, reglages, prix }).catch(e => console.error(e));
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [pret, recettes, planning, reglages, prix]);
 
   const parId = useMemo(() => Object.fromEntries(recettes.map(r => [r.id, r])), [recettes]);
 
