@@ -33,7 +33,9 @@ img { display: block; max-width: 100%; }
 
 /* Structure */
 .app { min-height: 100dvh; padding-top: calc(var(--barre-h) + env(safe-area-inset-top)); padding-bottom: calc(var(--menu-h) + env(safe-area-inset-bottom) + 16px); }
-.barre { position: fixed; top: 0; left: 0; right: 0; z-index: 20; height: calc(var(--barre-h) + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 8px 0; display: grid; grid-template-columns: 48px 1fr 48px; align-items: center; background: var(--fond); border-bottom: 1px solid var(--ligne); }
+.barre { position: fixed; top: 0; left: 0; right: 0; z-index: 20; height: calc(var(--barre-h) + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 8px 0; display: grid; grid-template-columns: 96px 1fr 96px; align-items: center; background: var(--fond); border-bottom: 1px solid var(--ligne); }
+.barre-cote { display: flex; }
+.barre-cote:last-child { justify-content: flex-end; }
 .barre .nom { text-align: center; font-family: var(--police-titre); font-size: 1.2rem; font-weight: 600; background: none; border: 0; padding: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .icone { width: 48px; height: 48px; border: 0; background: none; border-radius: 50%; display: grid; place-items: center; font-size: 1.5rem; color: var(--texte); }
 .icone:active { background: var(--surface-2); }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from './store';
-import { Icone, Toasts } from './ui';
+import { Feuille, Icone, Toasts } from './ui';
+import Suggestions from './Suggestions';
 import Semaine from './screens/Semaine';
 import Mois from './screens/Mois';
 import Recettes from './screens/Recettes';
@@ -18,6 +19,8 @@ const lireRoute = () => (location.hash.replace(/^#/, '') || '/semaine').split('?
 export default function App() {
   const { pret, reglages } = useStore();
   const [route, setRoute] = useState(lireRoute);
+  // Bouton Remarque : écran en cours au moment de l'appui (null = feuille fermée)
+  const [remarque, setRemarque] = useState<string | null>(null);
   useEffect(() => {
     const f = () => { setRoute(lireRoute()); window.scrollTo(0, 0); };
     window.addEventListener('hashchange', f);
@@ -44,9 +47,12 @@ export default function App() {
   return (
     <div className="app">
       <header className="barre">
-        <a className="icone" href="#/editer/nouvelle" aria-label="Ajouter une recette">{Icone.plus}</a>
+        <div className="barre-cote"><a className="icone" href="#/editer/nouvelle" aria-label="Ajouter une recette">{Icone.plus}</a></div>
         <button className="nom" onClick={() => { location.hash = '/semaine'; window.dispatchEvent(new Event('semaine-courante')); }}>{reglages.nomAppli}</button>
-        <a className="icone" href="#/reglages" aria-label="Réglages">{Icone.reglages}</a>
+        <div className="barre-cote">
+          <button className="icone" aria-label="Faire une remarque sur cet écran" onClick={() => setRemarque(location.hash || '#/semaine')}>{Icone.bulle}</button>
+          <a className="icone" href="#/reglages" aria-label="Réglages">{Icone.reglages}</a>
+        </div>
       </header>
       <main>{contenu}</main>
       <nav className="menu" aria-label="Menu principal">
@@ -56,6 +62,11 @@ export default function App() {
         <a href="#/courses" className={onglet === 'courses' ? 'actif' : ''}>{Icone.courses}Courses</a>
         <a href="#/batch" className={onglet === 'batch' ? 'actif' : ''}>{Icone.batch}Batch cooking</a>
       </nav>
+      {remarque && (
+        <Feuille titre="Remarque" sousTitre={`Sur l’écran ${remarque}`} onFermer={() => setRemarque(null)}>
+          <Suggestions ecran={remarque} />
+        </Feuille>
+      )}
       <Toasts />
     </div>
   );
