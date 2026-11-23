@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import * as db from './db';
-import { REGLAGES_DEFAUT, type Case, type Moment, type Planning, type Recette, type Reglages } from './types';
+import { REGLAGES_DEFAUT, type Case, type Moment, type Planning, type Prix, type Recette, type Reglages } from './types';
 import { ajouterJours, aujourdhui } from './lib/dates';
 
 export const nouvelId = () => (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36));
@@ -18,6 +18,8 @@ interface Etat {
   modifierReglages: (r: Partial<Reglages>) => void;
   derniereFois: (recetteId: string) => string | null;
   importer: (s: db.Sauvegarde) => Promise<void>;
+  prix: Prix;
+  modifierPrix: (cle: string, euros: number | null) => void;
 }
 
 const Ctx = createContext<Etat | null>(null);
@@ -28,11 +30,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [recettes, setRecettes] = useState<Recette[]>([]);
   const [planning, setPlanning] = useState<Planning>({});
   const [reglages, setReglages] = useState<Reglages>(REGLAGES_DEFAUT);
+  const [prix, setPrix] = useState<Prix>({});
 
   useEffect(() => {
     (async () => {
-      const [r, p, g] = await Promise.all([db.lireRecettes(), db.lire<Planning>('planning'), db.lire<Reglages>('reglages')]);
-      setRecettes(r); setPlanning(p ?? {}); setReglages({ ...REGLAGES_DEFAUT, ...(g ?? {}) });
+      const [r, p, g, x] = await Promise.all([db.lireRecettes(), db.lire<Planning>('planning'), db.lire<Reglages>('reglages'), db.lire<Prix>('prix')]);
+      setRecettes(r); setPlanning(p ?? {}); setReglages({ ...REGLAGES_DEFAUT, ...(g ?? {}) }); setPrix(x ?? {});
       setPret(true);
     })().catch(e => { console.error(e); setPret(true); });
   }, []);
@@ -90,10 +93,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const importer = useCallback(async (s: db.Sauvegarde) => {
     await db.remplacerTout(s);
-    setRecettes(s.recettes); setPlanning(s.planning); setReglages({ ...REGLAGES_DEFAUT, ...s.reglages });
+    setRecettes(s.recettes); setPlanning(s.planning); setReglages({ ...REGLAGES_DEFAUT, ...s.reglages }); setPrix(s.prix ?? {});
   }, []);
 
-  const v: Etat = { pret, recettes, parId, planning, reglages, enregistrerRecette, supprimerRecette, mettreCase, modifierPlanning, modifierReglages, derniereFois, importer };
+  const modifierPrix = useCallback((cle: string, euros: number | null) => {
+    setPrix(x => { const n = { ...x }; if (euros == null) delete n[cle]; else n[cle] = euros; db.ecrire('prix', n); return n; });
+  }, []);
+
+  const v: Etat = { pret, recettes, parId, planning, reglages, enregistrerRecette, supprimerRecette, mettreCase, modifierPlanning, modifierReglages, derniereFois, importer, prix, modifierPrix };
   return <Ctx.Provider value={v}>{children}</Ctx.Provider>;
 }
 

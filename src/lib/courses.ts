@@ -52,9 +52,9 @@ const UNITES: [RegExp, string, number][] = [
 const singulier = (s: string) => s.toLowerCase().replace(/\.$/, '').replace(/eaux$/, 'eau').replace(/s$/, '');
 const pluriel = (s: string, n: number) => n <= 1 || /[sx]$/.test(s) ? s : s.endsWith('eau') ? s + 'x' : s + 's';
 
-interface Lu { nom: string; unite: string; valeur: number | null }
+export interface Lu { nom: string; unite: string; valeur: number | null }
 
-function lireLigne(ligne: string, facteur: number): Lu[] {
+export function lireLigne(ligne: string, facteur: number): Lu[] {
   const l = ligne.replace(/\s*\(.*?\)\s*/g, ' ').trim();
   const q = /^(un peu|quelques)\b/i.test(l) ? null : lireQuantite(l);
   if (!q) {
@@ -70,7 +70,7 @@ function lireLigne(ligne: string, facteur: number): Lu[] {
   return [{ nom: nom || l, unite, valeur: q.v * k * facteur }];
 }
 
-const cleDe = (nom: string) => sansAccent(nom).replace(/[’']/g, ' ').replace(/\b(\w{3,}?)(s|x)\b/g, '$1').replace(/\s+/g, ' ').trim();
+export const cleDe = (nom: string) => sansAccent(nom).replace(/[’']/g, ' ').replace(/\b(\w{3,}?)(s|x)\b/g, '$1').replace(/\s+/g, ' ').trim();
 
 function formaterQuantite(v: number, unite: string): string {
   if (unite === 'g') return v >= 1000 ? `${formater(v / 1000)} kg` : `${formater(v)} g`;
@@ -115,4 +115,16 @@ export function texteCourses(titre: string, articles: Article[]): string {
     return l.length ? `${t.toUpperCase()}\n${l.map(a => `☐ ${a.nom}${a.quantite ? ` (${a.quantite})` : ''}`).join('\n')}` : '';
   }).filter(Boolean);
   return `${titre}\n\n${blocs.join('\n\n')}`;
+}
+
+// Lignes d'ingrédients des repas prévus (avec le facteur de portions), pour estimer le coût de la liste
+export function lignesPrevues(jours: string[], planning: Planning, parId: Record<string, Recette>): { ligne: string; facteur: number }[] {
+  const out: { ligne: string; facteur: number }[] = [];
+  for (const d of jours) for (const m of MOMENTS) {
+    const c = planning[d]?.[m];
+    if (!c || c.type !== 'recette') continue;
+    const r = parId[c.recetteId];
+    if (r) for (const ligne of r.ingredients) out.push({ ligne, facteur: c.portions / (r.portions || 1) });
+  }
+  return out;
 }

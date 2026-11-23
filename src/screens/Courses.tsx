@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store';
 import { ajouterJours, aujourdhui, joursSemaine, lundi, titreSemaine } from '../lib/dates';
-import { listeCourses, RAYONS, texteCourses } from '../lib/courses';
+import { lignesPrevues, listeCourses, RAYONS, texteCourses } from '../lib/courses';
+import { cout } from '../lib/prix';
+import { ResumeCout } from '../Prix';
 import { Icone, toast } from '../ui';
 
 // Liste de courses de la semaine, cochable, rangée par rayon, à copier ou partager vers une note
 export default function Courses() {
-  const { planning, parId } = useStore();
+  const { planning, parId, prix } = useStore();
   const auj = aujourdhui();
   const [debut, setDebut] = useState(() => lundi(auj));
   const cleCoches = `courses-coches-${debut}`;
@@ -18,6 +20,7 @@ export default function Courses() {
   };
 
   const { articles, recettes } = useMemo(() => listeCourses(joursSemaine(debut), planning, parId), [debut, planning, parId]);
+  const coutSemaine = useMemo(() => cout(lignesPrevues(joursSemaine(debut), planning, parId), prix), [debut, planning, parId, prix]);
   const aAcheter = articles.filter(a => !coches.includes(a.cle));
   const titre = `Courses ${titreSemaine(debut)}`;
   const texte = () => texteCourses(titre, aAcheter);
@@ -76,6 +79,11 @@ export default function Courses() {
           );
         })}
         {coches.length > 0 && <button className="lien" onClick={() => { setCoches([]); localStorage.removeItem(cleCoches); }}>Tout décocher</button>}
+
+        <section className="carte">
+          <h2>Coût estimé de la semaine</h2>
+          <ResumeCout cout={coutSemaine} />
+        </section>
       </>}
     </div>
   );

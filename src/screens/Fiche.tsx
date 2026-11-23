@@ -3,9 +3,11 @@ import { nouvelId, useStore } from '../store';
 import { ajusterLigne, duree } from '../lib/quantites';
 import { Compteur, Icone, toast } from '../ui';
 import { aller } from '../App';
+import { cout } from '../lib/prix';
+import { ResumeCout } from '../Prix';
 
 export default function Fiche({ id }: { id: string }) {
-  const { parId, enregistrerRecette, supprimerRecette } = useStore();
+  const { parId, enregistrerRecette, supprimerRecette, prix } = useStore();
   const r = parId[id];
   const depart = Number(new URLSearchParams(location.hash.split('?')[1] ?? '').get('portions')) || r?.portions || 1;
   const [portions, setPortions] = useState(depart);
@@ -70,6 +72,11 @@ export default function Fiche({ id }: { id: string }) {
       </section>
 
       {r.source?.url && <p className="petit doux">Source : <a href={r.source.url} target="_blank" rel="noreferrer">{new URL(r.source.url).hostname}</a></p>}
+
+      <section className="section">
+        <h2>Coût</h2>
+        <ResumeCout cout={cout(r.ingredients.map(ligne => ({ ligne, facteur })), prix)} portions={portions} />
+      </section>
 
       <section className="section">
         <h2>Calories et nutriments</h2>

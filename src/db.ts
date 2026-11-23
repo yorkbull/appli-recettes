@@ -1,5 +1,5 @@
 // Stockage sur le téléphone (IndexedDB). Tout est lu au démarrage puis écrit à chaque changement.
-import type { Planning, Recette, Reglages } from './types';
+import type { Planning, Prix, Recette, Reglages } from './types';
 
 const NOM = 'appli-recettes';
 const VERSION = 1;
@@ -37,7 +37,7 @@ export const supprimerRecette = (id: string) => tx('recettes', 'readwrite', s =>
 export const lire = <T>(cle: string) => tx<T>('kv', 'readonly', s => s.get(cle) as IDBRequest<T>);
 export const ecrire = (cle: string, v: unknown) => tx('kv', 'readwrite', s => { s.put(v, cle); });
 
-export interface Sauvegarde { version: 1; date: string; recettes: Recette[]; planning: Planning; reglages: Reglages }
+export interface Sauvegarde { version: 1; date: string; recettes: Recette[]; planning: Planning; reglages: Reglages; prix?: Prix }
 
 export async function remplacerTout(s: Sauvegarde) {
   const d = await db();
@@ -48,6 +48,7 @@ export async function remplacerTout(s: Sauvegarde) {
     for (const r of s.recettes) rs.put(r);
     t.objectStore('kv').put(s.planning, 'planning');
     t.objectStore('kv').put(s.reglages, 'reglages');
+    t.objectStore('kv').put(s.prix ?? {}, 'prix');
     t.oncomplete = () => ok();
     t.onerror = () => ko(t.error);
   });

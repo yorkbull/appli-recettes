@@ -31,6 +31,9 @@ export type Case =
 // planning : date ISO (AAAA-MM-JJ) -> moment -> case
 export type Planning = Record<string, Partial<Record<Moment, Case>>>;
 
+// Prix relevés en magasin : « produit|unité » -> euros le kg (g), le litre (ml) ou par pièce/unité comptée
+export type Prix = Record<string, number>;
+
 export interface Reglages {
   nomAppli: string;
   thematiques: string[];

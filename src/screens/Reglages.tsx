@@ -5,7 +5,7 @@ import { demanderPersistance, type Sauvegarde } from '../db';
 import Suggestions from '../Suggestions';
 
 export default function Reglages() {
-  const { reglages, modifierReglages, recettes, planning, importer } = useStore();
+  const { reglages, modifierReglages, recettes, planning, importer, prix } = useStore();
   const [nouveau, setNouveau] = useState('');
   const [persist, setPersist] = useState<string>('…');
   useEffect(() => { navigator.storage?.persisted?.().then(p => setPersist(p ? 'protégées' : 'non protégées')).catch(() => setPersist('inconnu')); }, []);
@@ -13,7 +13,7 @@ export default function Reglages() {
   const renommer = (i: number, v: string) => { const t = reglages.thematiques.slice(); t[i] = v; modifierReglages({ thematiques: t }); };
 
   const exporter = () => {
-    const s: Sauvegarde = { version: 1, date: new Date().toISOString(), recettes, planning, reglages };
+    const s: Sauvegarde = { version: 1, date: new Date().toISOString(), recettes, planning, reglages, prix };
     const url = URL.createObjectURL(new Blob([JSON.stringify(s)], { type: 'application/json' }));
     const a = document.createElement('a'); a.href = url; a.download = `recettes-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
