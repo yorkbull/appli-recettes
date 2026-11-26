@@ -18,7 +18,6 @@ export const Icone = {
   courses: <svg viewBox="0 0 24 24" {...P}><path d="M6 7h12l-1 13H7L6 7z" /><path d="M9 10V6a3 3 0 0 1 6 0v4" /></svg>,
   bulle: <svg viewBox="0 0 24 24" {...P}><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12z" /></svg>,
   maison: <svg viewBox="0 0 24 24" {...P}><path d="M3 11l9-7 9 7M5 10v10h14V10" /><path d="M10 20v-5h4v5" /></svg>,
-  micro: <svg viewBox="0 0 24 24" {...P}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>,
   corbeille:<svg viewBox="0 0 24 24" {...P}><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6" /></svg>,
 };
 

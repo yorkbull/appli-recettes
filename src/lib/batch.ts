@@ -123,6 +123,7 @@ export function planCuisine(plats: Plat[], induction = false): { taches: Tache[]
   if (temps.length) taches.push({ id: 'four', phase: 1, texte: `Préchauffer le four à ${temps[0]} °C${temps.length > 1 ? ` (on baissera ensuite à ${temps.slice(1).join(' puis ')} °C)` : ''}.` });
   const eau = plats.some(p => /pates|spaghetti|riz|semoule|tagliatelle|penne|coquillette|quinoa|boulgour/.test(sa(p.r.ingredients.join(' '))));
   if (eau && !induction) taches.push({ id: 'eau', phase: 1, texte: 'Mettre une grande casserole d’eau à chauffer pour les pâtes, le riz ou la semoule.' });
+  if (eau && induction) taches.push({ id: 'eau', phase: 1, texte: 'Mettre une grande casserole d’eau en Booster avec un couvercle pour les pâtes, le riz ou la semoule : elle bout en 5 minutes environ.' });
   if (induction) taches.push({ id: 'plaques', phase: 1, texte: 'Plaques à induction : poser sur chaque plaque la casserole ou la poêle prévue (fond aimanté) et garder une plaque libre pour les cuissons rapides.' });
 
   // 2. Plats à cuisson longue, le plus long d'abord : leurs étapes jusqu'au lancement de la cuisson
@@ -142,7 +143,6 @@ export function planCuisine(plats: Plat[], induction = false): { taches: Tache[]
     });
   }
   for (const [i, lot] of lotsPreparation(courts).entries()) taches.push({ id: 'lot' + i, phase: 3, texte: `Éplucher et couper : ${lot}.` });
-  if (eau && induction) taches.push({ id: 'eau', phase: 4, texte: 'Mettre une grande casserole d’eau en Booster avec un couvercle pour les pâtes, le riz ou la semoule : elle bout en 5 minutes environ.' });
   for (const { r } of courts) r.etapes.forEach((e, i) => {
     if (PRECHAUFFE.test(sa(e)) && !/[.;]\s+\S/.test(e.trim().replace(/\.$/, ''))) return;
     taches.push({ id: `${r.id}-${i}`, phase: 4, texte: e, plat: r.titre, minutes: dureeEtape(e) || undefined });

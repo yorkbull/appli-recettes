@@ -7,7 +7,7 @@ import { duree } from '../lib/quantites';
 import { conservation, libelleRepas, periodeSession, planCuisine, planningSession, platsSession, prochaineSession, repasCouverts, texteDuree, titreSession, TITRES_PHASES, type Tache } from '../lib/batch';
 import { Icone, toast } from '../ui';
 import { conseilInduction } from '../lib/induction';
-import { alerte, parler, useEcoute, voixDisponible } from '../lib/voix';
+import { alerte } from '../lib/sonnerie';
 
 // Batch cooking : session du dimanche (repas jusqu'au mercredi midi) et du mercredi (jusqu'au vendredi midi)
 export default function Batch() {
@@ -31,7 +31,6 @@ export default function Batch() {
   // Plan dans l'ordre d'affichage ; l'étape « en cours » est la première pas encore cochée
   const ordre = useMemo(() => ([1, 2, 3, 4, 5] as const).flatMap(ph => plan.taches.filter(t => t.phase === ph)), [plan]);
   const courante = ordre.find(t => !faites.includes(t.id));
-  const dire = (t?: Tache) => { const c = t && induction ? conseilInduction(t.texte) : null; parler(t ? `${t.plat ? t.plat + '. ' : ''}${t.texte}${c ? ' ' + c.replace(/\(P\)/, '') : ''}` : 'Tout est fait. Bravo !'); };
 
   // Minuteurs de cuisson
   type Minuteur = { id: string; fin: number; libelle: string; sonne?: boolean };
@@ -43,39 +42,42 @@ export default function Batch() {
       tic(x => x + 1);
       setMinuteurs(ms => ms.map(m => {
         if (m.sonne || Date.now() < m.fin) return m;
-        alerte(); parler(`Minuteur terminé : ${m.libelle}`);
+        alerte(); toast(`Minuteur terminé : ${m.libelle}`);
         return { ...m, sonne: true };
       }));
     }, 1000);
     return () => clearInterval(t);
   }, [minuteurs.length]);
   const lancerMinuteur = (t?: Tache) => {
-    if (!t?.minutes) { parler('Pas de temps de cuisson pour cette étape.'); return; }
+    if (!t?.minutes) return;
     setMinuteurs(ms => [...ms.filter(m => m.id !== t.id), { id: t.id, fin: Date.now() + t.minutes! * 60000, libelle: t.plat ?? 'cuisson' }]);
-    parler(`Minuteur de ${duree(Math.round(t.minutes))} lancé${t.plat ? ' pour ' + t.plat : ''}.`);
   };
   const reste = (m: Minuteur) => { const s2 = Math.max(0, Math.round((m.fin - Date.now()) / 1000)); return `${Math.floor(s2 / 60)}:${String(s2 % 60).padStart(2, '0')}`; };
 
-  // Commandes vocales : « suivant » coche l'étape en cours, « précédent » décoche la dernière, « minuteur » lance la cuisson
-  const ecoute = useEcoute(phrase => {
-    if (/minut/.test(phrase)) {
-      // l'étape en cours si elle a une durée, sinon la dernière étape cochée qui en a une
-      const avecTemps = courante?.minutes ? courante : [...ordre].reverse().find(t => faites.includes(t.id) && t.minutes);
-      lancerMinuteur(avecTemps);
-    } else if (/suivant|c.?est fait|termine|\bok\b|d.?accord/.test(phrase)) {
-      if (!courante) { dire(); return; }
-      const n = [...faites, courante.id]; setFaites(n); localStorage.setItem(cle, JSON.stringify(n));
-      dire(ordre.find(t => !n.includes(t.id)));
-    } else if (/precedent|precedente|retour|annule/.test(phrase)) {
-      const derniere = [...ordre].reverse().find(t => faites.includes(t.id));
-      if (!derniere) { parler('Rien à décocher.'); return; }
-      const n = faites.filter(x => x !== derniere.id); setFaites(n); localStorage.setItem(cle, JSON.stringify(n));
-      dire(derniere);
-    } else if (/repete|relis|redis|quoi/.test(phrase)) dire(courante);
-  });
-  const basculerVoix = () => {
-    if (!ecoute.actif) { parler('Je vous écoute. Dites suivant, précédent ou minuteur.'); setTimeout(() => dire(courante), 3500); }
-    ecoute.setActif(!ecoute.actif);
+  // Gros bouton rouge : valide l'étape en cours, lance son minuteur s'il y a une cuisson,
+  // puis fait remonter la suivante en haut de l'écran (aucune autre manipulation)
+  // place l'étape juste sous la barre du haut et les minuteurs
+  const decalageHaut = () => Math.max(64, document.querySelector('.minuteurs-batch')?.getBoundingClientRect().bottom ?? 0) + 10;
+  const montrer = (id?: string) => {
+    if (!id) return;
+    setTimeout(() => { const e = document.getElementById('etape-' + id); if (e) window.scrollBy({ top: e.getBoundingClientRect().top - decalageHaut(), behavior: 'smooth' }); }, 60);
+  };
+  const valider = () => {
+    if (!courante) return;
+    // étape en cours hors de l'écran : le premier appui la montre, sans rien cocher à l'aveugle
+    const e = document.getElementById('etape-' + courante.id)?.getBoundingClientRect();
+    if (!e || e.top < decalageHaut() - 20 || e.bottom > innerHeight - 160) { montrer(courante.id); return; }
+    const n = [...faites, courante.id]; setFaites(n); localStorage.setItem(cle, JSON.stringify(n));
+    navigator.vibrate?.(30);
+    if (courante.minutes) lancerMinuteur(courante);
+    const suivante = ordre.find(t => !n.includes(t.id));
+    if (suivante) montrer(suivante.id); else toast('Tout est fait. Bravo !');
+  };
+  const annuler = () => {
+    const derniere = [...ordre].reverse().find(t => faites.includes(t.id));
+    if (!derniere) return;
+    const n = faites.filter(x => x !== derniere.id); setFaites(n); localStorage.setItem(cle, JSON.stringify(n));
+    montrer(derniere.id);
   };
 
   const partagerCourses = async () => {
@@ -140,25 +142,19 @@ export default function Batch() {
 
         <section className="carte">
           <h2>Plan de cuisine</h2>
-          <p className="doux petit" style={{ marginTop: 0 }}>Dans cet ordre, les cuissons longues tournent pendant que vous préparez le reste. Cochez au fur et à mesure.</p>
-          {voixDisponible() && <>
-            <button className={'btn plein' + (ecoute.actif ? ' principal' : '')} onClick={basculerVoix} aria-pressed={ecoute.actif} style={{ gap: 8 }}>
-              <span style={{ width: 22, height: 22, display: 'inline-flex' }}>{Icone.micro}</span>{ecoute.actif ? 'Arrêter la commande vocale' : 'Commande vocale'}
-            </button>
-            <p className="doux petit">{ecoute.actif ? 'À l’écoute : dites « suivant » (coche l’étape), « précédent » (décoche), « minuteur » (lance la cuisson de l’étape) ou « répète ».' : 'Mains prises ? Pilotez le plan à la voix.'}</p>
-            {ecoute.erreur && <p className="petit" style={{ color: 'var(--danger)' }}>{ecoute.erreur}</p>}
-          </>}
-          {minuteurs.length > 0 && <div style={{ position: 'sticky', top: 64, zIndex: 5, background: 'var(--surface)', padding: '4px 0' }}>
-            {minuteurs.map(m => <button key={m.id} className={'minuteur ' + (m.sonne ? 'fini' : 'encours')} onClick={() => setMinuteurs(ms => ms.filter(x => x.id !== m.id))}
+          <p className="doux petit" style={{ marginTop: 0 }}>Dans cet ordre, les cuissons longues tournent pendant que vous préparez le reste. Appuyez sur le gros bouton rouge à chaque étape terminée : la suivante remonte en haut de l’écran et les cuissons lancent leur minuteur.</p>
+          {minuteurs.length > 0 && <div className="minuteurs-batch">
+            {minuteurs.map(m => <button key={m.id} className={'minuteur petit-minuteur ' + (m.sonne ? 'fini' : 'encours')} onClick={() => setMinuteurs(ms => ms.filter(x => x.id !== m.id))}
               aria-label={`Minuteur ${m.libelle}, toucher pour arrêter`}>⏱ {m.sonne ? 'Terminé !' : reste(m)} · {m.libelle}</button>)}
           </div>}
           {phases.map(({ ph, taches }, rang) => (
             <div key={ph}>
               <h3 style={{ margin: '14px 0 4px' }}>{rang + 1}. {TITRES_PHASES[ph]}</h3>
-              {taches.map(t => <Etape key={t.id} t={t} induction={induction} faite={faites.includes(t.id)} enCours={ecoute.actif && courante?.id === t.id} onMinuteur={() => lancerMinuteur(t)} onBasculer={() => basculer(t.id)} />)}
+              {taches.map(t => <Etape key={t.id} t={t} induction={induction} faite={faites.includes(t.id)} enCours={courante?.id === t.id} onMinuteur={() => lancerMinuteur(t)} onBasculer={() => basculer(t.id)} />)}
             </div>
           ))}
           {faites.length > 0 && <button className="lien" onClick={() => { setFaites([]); localStorage.removeItem(cle); }}>Tout décocher</button>}
+          <div style={{ height: '55vh' }} aria-hidden="true" />{/* place pour faire remonter la dernière étape en haut */}
         </section>
 
         <section className="carte">
@@ -173,6 +169,14 @@ export default function Batch() {
           </>}
           <p className="doux petit">Frigo entre 0 et 4 °C : 3 jours maximum pour un plat cuisiné, 2 jours pour le poisson. Au-delà, congeler le jour de la cuisson. Réchauffer une seule fois, bien chaud à cœur. Ne jamais recongeler un plat décongelé.</p>
         </section>
+
+        {courante && (
+          <div className="batch-boutons">
+            {faites.length > 0 ? <button className="batch-annuler" aria-label="Revenir à l’étape précédente" onClick={annuler}>↶</button> : <span className="batch-annuler vide" />}
+            <button className="batch-valider" onClick={valider} aria-label={`Étape faite : ${courante.texte}`}>✓<small>Fait</small></button>
+            <span className="batch-annuler vide" />
+          </div>
+        )}
       </>}
     </div>
   );
@@ -180,7 +184,7 @@ export default function Batch() {
 
 function Etape({ t, induction, faite, enCours, onBasculer, onMinuteur }: { t: Tache; induction: boolean; faite: boolean; enCours: boolean; onBasculer: () => void; onMinuteur: () => void }) {
   return (
-    <label className={'article' + (faite ? ' coche' : '') + (enCours ? ' en-cours' : '')} style={{ alignItems: 'start', paddingTop: 10, paddingBottom: 10 }}>
+    <label id={'etape-' + t.id} className={'article etape-batch' + (faite ? ' coche' : '') + (enCours ? ' en-cours' : '')} style={{ alignItems: 'start', paddingTop: 10, paddingBottom: 10 }}>
       <input type="checkbox" checked={faite} onChange={onBasculer} style={{ marginTop: 2 }} />
       <span className="article-nom">
         {t.plat && <span className="etiquette" style={{ marginRight: 6 }}>{t.plat}</span>}
