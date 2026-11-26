@@ -7,7 +7,7 @@ import { duree } from '../lib/quantites';
 import { conservation, libelleRepas, periodeSession, planCuisine, planningSession, platsSession, prochaineSession, repasCouverts, texteDuree, titreSession, TITRES_PHASES, type Tache } from '../lib/batch';
 import { Icone, toast } from '../ui';
 import { conseilInduction } from '../lib/induction';
-import { arreterSonnerie, deverrouillerSon, ecranAllume, sonner } from '../lib/sonnerie';
+import { annulerSonnerie, arreterSonnerie, deverrouillerSon, ecranAllume, programmerSonnerie, sonner, sonneriesProgrammees } from '../lib/sonnerie';
 
 // Batch cooking : session du dimanche (repas jusqu'au mercredi midi) et du mercredi (jusqu'au vendredi midi)
 export default function Batch() {
@@ -65,7 +65,12 @@ export default function Batch() {
   const enCours = minuteurs.some(m => !m.sonne);
   useEffect(() => { if (sonne) sonner(); else arreterSonnerie(); }, [sonne]);
   useEffect(() => { ecranAllume(enCours || sonne); }, [enCours, sonne]);
-  useEffect(() => () => { arreterSonnerie(); ecranAllume(false); }, []);
+  // chaque minuteur en cours a sa sonnerie programmée à l'avance ; minuteur arrêté ou retiré : sonnerie annulée
+  useEffect(() => {
+    for (const m of minuteurs) if (!m.sonne) programmerSonnerie(m.id, m.fin);
+    for (const id of sonneriesProgrammees()) if (!minuteurs.some(m => m.id === id)) annulerSonnerie(id);
+  });
+  useEffect(() => () => { arreterSonnerie(); ecranAllume(false); sonneriesProgrammees().forEach(annulerSonnerie); }, []);
   const stopSonnerie = () => { deverrouillerSon(); setMinuteurs(ms => ms.filter(m => !m.sonne)); };
   const lancerMinuteur = (t?: Tache, etape = false) => {
     if (!t?.minutes) return;
