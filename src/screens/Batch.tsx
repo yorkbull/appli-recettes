@@ -6,17 +6,19 @@ import { listeCourses, RAYONS, texteCourses } from '../lib/courses';
 import { duree } from '../lib/quantites';
 import { conservation, libelleRepas, periodeSession, planCuisine, planningSession, platsSession, prochaineSession, repasCouverts, texteDuree, titreSession, TITRES_PHASES, type Tache } from '../lib/batch';
 import { Icone, toast } from '../ui';
+import { conseilInduction } from '../lib/induction';
 import { alerte, parler, useEcoute, voixDisponible } from '../lib/voix';
 
 // Batch cooking : session du dimanche (repas jusqu'au mercredi midi) et du mercredi (jusqu'au vendredi midi)
 export default function Batch() {
-  const { planning, parId } = useStore();
+  const { planning, parId, reglages } = useStore();
+  const induction = reglages.induction !== false;
   const [decalage, setDecalage] = useState(0);
   const s = useMemo(() => prochaineSession(aujourdhui(), decalage), [decalage]);
 
   const repas = useMemo(() => repasCouverts(s, planning), [s, planning]);
   const plats = useMemo(() => platsSession(repas, parId), [repas, parId]);
-  const plan = useMemo(() => planCuisine(plats), [plats]);
+  const plan = useMemo(() => planCuisine(plats, induction), [plats, induction]);
   const conserver = useMemo(() => conservation(s, plats), [s, plats]);
   const courses = useMemo(() => { const p = planningSession(s, planning); return listeCourses(p.jours, p.planning, parId).articles; }, [s, planning, parId]);
 
@@ -29,7 +31,7 @@ export default function Batch() {
   // Plan dans l'ordre d'affichage ; l'étape « en cours » est la première pas encore cochée
   const ordre = useMemo(() => ([1, 2, 3, 4, 5] as const).flatMap(ph => plan.taches.filter(t => t.phase === ph)), [plan]);
   const courante = ordre.find(t => !faites.includes(t.id));
-  const dire = (t?: Tache) => parler(t ? `${t.plat ? t.plat + '. ' : ''}${t.texte}` : 'Tout est fait. Bravo !');
+  const dire = (t?: Tache) => { const c = t && induction ? conseilInduction(t.texte) : null; parler(t ? `${t.plat ? t.plat + '. ' : ''}${t.texte}${c ? ' ' + c.replace(/\(P\)/, '') : ''}` : 'Tout est fait. Bravo !'); };
 
   // Minuteurs de cuisson
   type Minuteur = { id: string; fin: number; libelle: string; sonne?: boolean };
@@ -153,7 +155,7 @@ export default function Batch() {
           {phases.map(({ ph, taches }, rang) => (
             <div key={ph}>
               <h3 style={{ margin: '14px 0 4px' }}>{rang + 1}. {TITRES_PHASES[ph]}</h3>
-              {taches.map(t => <Etape key={t.id} t={t} faite={faites.includes(t.id)} enCours={ecoute.actif && courante?.id === t.id} onMinuteur={() => lancerMinuteur(t)} onBasculer={() => basculer(t.id)} />)}
+              {taches.map(t => <Etape key={t.id} t={t} induction={induction} faite={faites.includes(t.id)} enCours={ecoute.actif && courante?.id === t.id} onMinuteur={() => lancerMinuteur(t)} onBasculer={() => basculer(t.id)} />)}
             </div>
           ))}
           {faites.length > 0 && <button className="lien" onClick={() => { setFaites([]); localStorage.removeItem(cle); }}>Tout décocher</button>}
@@ -176,7 +178,7 @@ export default function Batch() {
   );
 }
 
-function Etape({ t, faite, enCours, onBasculer, onMinuteur }: { t: Tache; faite: boolean; enCours: boolean; onBasculer: () => void; onMinuteur: () => void }) {
+function Etape({ t, induction, faite, enCours, onBasculer, onMinuteur }: { t: Tache; induction: boolean; faite: boolean; enCours: boolean; onBasculer: () => void; onMinuteur: () => void }) {
   return (
     <label className={'article' + (faite ? ' coche' : '') + (enCours ? ' en-cours' : '')} style={{ alignItems: 'start', paddingTop: 10, paddingBottom: 10 }}>
       <input type="checkbox" checked={faite} onChange={onBasculer} style={{ marginTop: 2 }} />
@@ -184,6 +186,7 @@ function Etape({ t, faite, enCours, onBasculer, onMinuteur }: { t: Tache; faite:
         {t.plat && <span className="etiquette" style={{ marginRight: 6 }}>{t.plat}</span>}
         {t.texte}
         {t.attente && t.minutes ? <span className="doux petit"> · cuit seul {duree(Math.round(t.minutes))}, passer à la suite</span> : null}
+        {induction && !faite && conseilInduction(t.texte) && <span className="conseil-induction">Induction : {conseilInduction(t.texte)}</span>}
       </span>
       {t.minutes ? <button type="button" className="corbeille" aria-label={`Lancer un minuteur de ${duree(Math.round(t.minutes))}`} onClick={e => { e.preventDefault(); onMinuteur(); }}>⏱</button> : <span />}
     </label>

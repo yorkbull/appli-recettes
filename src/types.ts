@@ -22,13 +22,17 @@ export interface Recette {
   modifieLe: string;
 }
 
+// Plat de remplacement pour quelqu'un qui ne mange pas le plat prévu (« un plat pour Marion »)
+export interface PlatPour { personne: string; recetteId: string; portions: number }
+
 // mange : repas coché comme déjà mangé (la coche suit le repas quand on le déplace)
+// pour : plats de remplacement servis au même repas
 export type Case = (
   | { type: 'recette'; recetteId: string; portions: number }
   | { type: 'restes'; recetteId: string; portions: number }
   | { type: 'dehors' }
   | { type: 'note'; texte: string }
-) & { mange?: boolean };
+) & { mange?: boolean; pour?: PlatPour[] };
 
 // Copie d'un repas vers une autre case : la copie n'est pas encore mangée
 export const sansCoche = (c: Case): Case => { const n = { ...c }; delete n.mange; return n; };
@@ -48,6 +52,7 @@ export interface Reglages {
   portionsParDefaut: number;
   gouts: Gout[];
   frigo: string[]; // produits déjà à la maison (frigo, placard)
+  induction: boolean; // plaques à induction : puissances conseillées dans les étapes
 }
 
 export const REGLAGES_DEFAUT: Reglages = {
@@ -60,4 +65,5 @@ export const REGLAGES_DEFAUT: Reglages = {
     { id: 'g3', personne: 'Charles', mot: 'fruits de mer', sauf: '', allergie: false },
   ],
   frigo: [],
+  induction: true,
 };

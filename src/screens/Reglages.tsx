@@ -81,6 +81,13 @@ export default function Reglages() {
         <div className="portions" style={{ margin: 0, border: 0, padding: 0 }}><span>Portions par défaut</span><Compteur valeur={reglages.portionsParDefaut} onChange={v => modifierReglages({ portionsParDefaut: v })} libelle="Portions par défaut" /></div>
       </div>
 
+      <div className="carte">
+        <label className="portions" style={{ margin: 0, border: 0, padding: 0, cursor: 'pointer' }}>
+          <span>Plaques à induction<br /><span className="doux petit">Puissance conseillée (1 à 9) sous les étapes des recettes et du batch cooking.</span></span>
+          <input type="checkbox" checked={reglages.induction !== false} onChange={e => modifierReglages({ induction: e.target.checked })} style={{ width: 24, height: 24, flex: 'none' }} />
+        </label>
+      </div>
+
       <Gouts />
 
       <div className="carte">

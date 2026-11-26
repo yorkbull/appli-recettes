@@ -70,7 +70,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const n: Planning = {};
       for (const [d, j] of Object.entries(p)) {
         const jj: Partial<Record<Moment, Case>> = {};
-        for (const [m, c] of Object.entries(j) as [Moment, Case][]) if (!('recetteId' in c) || c.recetteId !== id) jj[m] = c;
+        for (const [m, c] of Object.entries(j) as [Moment, Case][]) {
+          if ('recetteId' in c && c.recetteId === id) continue;
+          // retirer aussi la recette des plats de remplacement
+          jj[m] = c.pour?.some(p => p.recetteId === id) ? { ...c, pour: c.pour.filter(p => p.recetteId !== id) } : c;
+        }
         if (Object.keys(jj).length) n[d] = jj;
       }
       return n;
@@ -96,7 +100,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const auj = aujourdhui(); let best: string | null = null;
     for (const [d, j] of Object.entries(planning)) {
       if (d > auj) continue;
-      for (const c of Object.values(j)) if (c && 'recetteId' in c && c.recetteId === recetteId && (!best || d > best)) best = d;
+      for (const c of Object.values(j)) if (c && (('recetteId' in c && c.recetteId === recetteId) || c.pour?.some(p => p.recetteId === recetteId)) && (!best || d > best)) best = d;
     }
     return best;
   }, [planning]);

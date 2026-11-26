@@ -7,6 +7,7 @@ import { cout } from '../lib/prix';
 import { ResumeCout } from '../Prix';
 import { nutrition } from '../lib/nutrition';
 import { conflits } from '../lib/gouts';
+import { conseilInduction } from '../lib/induction';
 import { deSaison } from '../lib/saison';
 
 // Nom du site d'origine ; une adresse mal formée (fichier reçu, ancienne version) ne doit pas faire planter la fiche
@@ -67,7 +68,7 @@ export default function Fiche({ id }: { id: string }) {
 
       <section className="section">
         <h2>Préparation</h2>
-        <ol className="etapes">{r.etapes.map((e, i) => <li key={i}>{e}</li>)}</ol>
+        <ol className="etapes">{r.etapes.map((e, i) => { const c = reglages.induction !== false ? conseilInduction(e) : null; return <li key={i}>{e}{c && <span className="conseil-induction">Induction : {c}</span>}</li>; })}</ol>
       </section>
 
       <section className="section">

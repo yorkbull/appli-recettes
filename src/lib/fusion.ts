@@ -33,7 +33,8 @@ export function fusionner(ici: Sauvegarde, recu: Sauvegarde): { s: Sauvegarde; b
     const n = { ...(planning[d] ?? {}) };
     for (const [m, c] of Object.entries(jour) as [Moment, Case][]) {
       if (!c || n[m]) continue;
-      n[m] = 'recetteId' in c ? { ...c, recetteId: renommer.get(c.recetteId) ?? c.recetteId } : c;
+      const cc = c.pour ? { ...c, pour: c.pour.map(p => ({ ...p, recetteId: renommer.get(p.recetteId) ?? p.recetteId })) } : c;
+      n[m] = 'recetteId' in cc ? { ...cc, recetteId: renommer.get(cc.recetteId) ?? cc.recetteId } : cc;
       bilan.repas++;
     }
     if (Object.keys(n).length) planning[d] = n;

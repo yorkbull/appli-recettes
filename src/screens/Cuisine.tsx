@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { ajusterLigne, minuteurs } from '../lib/quantites';
+import { conseilInduction } from '../lib/induction';
 import { Feuille, Icone } from '../ui';
 
 type Minuteur = { cle: string; fin: number; total: number; libelle: string };
 
 // Mode cuisine : une étape à la fois, en grand, écran toujours allumé, minuteurs à toucher
 export default function Cuisine({ id }: { id: string }) {
-  const { parId } = useStore();
+  const { parId, reglages } = useStore();
   const r = parId[id];
   const portions = Number(new URLSearchParams(location.hash.split('?')[1] ?? '').get('portions')) || r?.portions || 1;
   const [i, setI] = useState(0);
@@ -62,6 +63,7 @@ export default function Cuisine({ id }: { id: string }) {
         {n ? <>
           <div className="num">Étape {i + 1} sur {n}</div>
           <p>{etape}</p>
+          {reglages.induction !== false && conseilInduction(etape) && <p className="conseil-induction">Induction : {conseilInduction(etape)}</p>}
           <div>{minuteurs(etape).map((t, k) => {
             const cle = `${i}-${k}`; const actif = mins.some(m => m.cle === cle);
             return <button key={cle} className={'minuteur' + (actif ? ' encours' : '')} onClick={() => lancer(cle, t.secondes, t.texte)}>⏱ {actif ? 'Arrêter' : 'Lancer'} {t.texte}</button>;

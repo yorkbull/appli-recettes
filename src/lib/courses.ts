@@ -110,6 +110,8 @@ function repasUniques(jours: string[], planning: Planning, parId: Record<string,
     const c = planning[d]?.[m];
     if (!c || c.type !== 'recette' || !parId[c.recetteId]) continue; // les restes sont déjà comptés avec le repas d'origine
     portions.set(c.recetteId, Math.max(portions.get(c.recetteId) ?? 0, c.portions));
+    // plats de remplacement (« un plat pour Marion ») servis au même repas
+    for (const p of c.pour ?? []) if (parId[p.recetteId]) portions.set(p.recetteId, Math.max(portions.get(p.recetteId) ?? 0, p.portions));
   }
   return [...portions].map(([id, p]) => ({ r: parId[id], facteur: p / (parId[id].portions || 1) }));
 }

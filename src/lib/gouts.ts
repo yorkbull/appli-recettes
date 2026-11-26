@@ -43,3 +43,13 @@ export function conflits(r: Recette, gouts: Gout[]): Conflit[] {
 export const resumeGout = (g: Gout) => `${g.allergie ? 'allergie : ' : 'n’aime pas : '}${g.mot}${g.sauf ? ` (sauf ${g.sauf})` : ''}`;
 // « Marion (fromage), Charles (fruits de mer) »
 export const resumeConflits = (c: Conflit[]) => c.map(x => `${x.gout.personne} (${x.gout.allergie ? 'allergie, ' : ''}${x.gout.mot})`).join(', ');
+
+// Personnes citées dans les goûts (Marion, Charles…)
+export const personnesGouts = (gouts: Gout[]) => [...new Set(gouts.map(g => g.personne.trim()).filter(Boolean))];
+
+// Qui ne mange pas cette recette, et pourquoi : { Marion: ['fromage', 'champignons'] }
+export function genes(r: Recette, gouts: Gout[]): Map<string, string[]> {
+  const m = new Map<string, string[]>();
+  for (const c of conflits(r, gouts)) m.set(c.gout.personne, [...(m.get(c.gout.personne) ?? []), c.gout.mot]);
+  return m;
+}
