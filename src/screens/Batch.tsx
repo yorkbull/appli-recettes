@@ -6,6 +6,7 @@ import { listeCourses, RAYONS, texteCourses } from '../lib/courses';
 import { duree } from '../lib/quantites';
 import { conservation, libelleRepas, periodeSession, planCuisine, planningSession, platsSession, prochaineSession, repasCouverts, texteDuree, titreSession, TITRES_PHASES, type Tache } from '../lib/batch';
 import { Icone, toast } from '../ui';
+import { alerte, parler, useEcoute, voixDisponible } from '../lib/voix';
 
 // Batch cooking : session du dimanche (repas jusqu'au mercredi midi) et du mercredi (jusqu'au vendredi midi)
 export default function Batch() {
@@ -24,6 +25,56 @@ export default function Batch() {
   const [faites, setFaites] = useState<string[]>([]);
   useEffect(() => { setFaites(JSON.parse(localStorage.getItem(cle) ?? '[]')); }, [cle]);
   const basculer = (id: string) => { const n = faites.includes(id) ? faites.filter(x => x !== id) : [...faites, id]; setFaites(n); localStorage.setItem(cle, JSON.stringify(n)); };
+
+  // Plan dans l'ordre d'affichage ; l'étape « en cours » est la première pas encore cochée
+  const ordre = useMemo(() => ([1, 2, 3, 4, 5] as const).flatMap(ph => plan.taches.filter(t => t.phase === ph)), [plan]);
+  const courante = ordre.find(t => !faites.includes(t.id));
+  const dire = (t?: Tache) => parler(t ? `${t.plat ? t.plat + '. ' : ''}${t.texte}` : 'Tout est fait. Bravo !');
+
+  // Minuteurs de cuisson
+  type Minuteur = { id: string; fin: number; libelle: string; sonne?: boolean };
+  const [minuteurs, setMinuteurs] = useState<Minuteur[]>([]);
+  const [, tic] = useState(0);
+  useEffect(() => {
+    if (!minuteurs.length) return;
+    const t = setInterval(() => {
+      tic(x => x + 1);
+      setMinuteurs(ms => ms.map(m => {
+        if (m.sonne || Date.now() < m.fin) return m;
+        alerte(); parler(`Minuteur terminé : ${m.libelle}`);
+        return { ...m, sonne: true };
+      }));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [minuteurs.length]);
+  const lancerMinuteur = (t?: Tache) => {
+    if (!t?.minutes) { parler('Pas de temps de cuisson pour cette étape.'); return; }
+    setMinuteurs(ms => [...ms.filter(m => m.id !== t.id), { id: t.id, fin: Date.now() + t.minutes! * 60000, libelle: t.plat ?? 'cuisson' }]);
+    parler(`Minuteur de ${duree(Math.round(t.minutes))} lancé${t.plat ? ' pour ' + t.plat : ''}.`);
+  };
+  const reste = (m: Minuteur) => { const s2 = Math.max(0, Math.round((m.fin - Date.now()) / 1000)); return `${Math.floor(s2 / 60)}:${String(s2 % 60).padStart(2, '0')}`; };
+
+  // Commandes vocales : « suivant » coche l'étape en cours, « précédent » décoche la dernière, « minuteur » lance la cuisson
+  const ecoute = useEcoute(phrase => {
+    if (/minut/.test(phrase)) {
+      // l'étape en cours si elle a une durée, sinon la dernière étape cochée qui en a une
+      const avecTemps = courante?.minutes ? courante : [...ordre].reverse().find(t => faites.includes(t.id) && t.minutes);
+      lancerMinuteur(avecTemps);
+    } else if (/suivant|c.?est fait|termine|\bok\b|d.?accord/.test(phrase)) {
+      if (!courante) { dire(); return; }
+      const n = [...faites, courante.id]; setFaites(n); localStorage.setItem(cle, JSON.stringify(n));
+      dire(ordre.find(t => !n.includes(t.id)));
+    } else if (/precedent|precedente|retour|annule/.test(phrase)) {
+      const derniere = [...ordre].reverse().find(t => faites.includes(t.id));
+      if (!derniere) { parler('Rien à décocher.'); return; }
+      const n = faites.filter(x => x !== derniere.id); setFaites(n); localStorage.setItem(cle, JSON.stringify(n));
+      dire(derniere);
+    } else if (/repete|relis|redis|quoi/.test(phrase)) dire(courante);
+  });
+  const basculerVoix = () => {
+    if (!ecoute.actif) { parler('Je vous écoute. Dites suivant, précédent ou minuteur.'); setTimeout(() => dire(courante), 3500); }
+    ecoute.setActif(!ecoute.actif);
+  };
 
   const partagerCourses = async () => {
     const texte = texteCourses(`Courses batch cooking du ${titreSession(s).toLowerCase()}`, courses);
@@ -88,10 +139,21 @@ export default function Batch() {
         <section className="carte">
           <h2>Plan de cuisine</h2>
           <p className="doux petit" style={{ marginTop: 0 }}>Dans cet ordre, les cuissons longues tournent pendant que vous préparez le reste. Cochez au fur et à mesure.</p>
+          {voixDisponible() && <>
+            <button className={'btn plein' + (ecoute.actif ? ' principal' : '')} onClick={basculerVoix} aria-pressed={ecoute.actif} style={{ gap: 8 }}>
+              <span style={{ width: 22, height: 22, display: 'inline-flex' }}>{Icone.micro}</span>{ecoute.actif ? 'Arrêter la commande vocale' : 'Commande vocale'}
+            </button>
+            <p className="doux petit">{ecoute.actif ? 'À l’écoute : dites « suivant » (coche l’étape), « précédent » (décoche), « minuteur » (lance la cuisson de l’étape) ou « répète ».' : 'Mains prises ? Pilotez le plan à la voix.'}</p>
+            {ecoute.erreur && <p className="petit" style={{ color: 'var(--danger)' }}>{ecoute.erreur}</p>}
+          </>}
+          {minuteurs.length > 0 && <div style={{ position: 'sticky', top: 64, zIndex: 5, background: 'var(--surface)', padding: '4px 0' }}>
+            {minuteurs.map(m => <button key={m.id} className={'minuteur ' + (m.sonne ? 'fini' : 'encours')} onClick={() => setMinuteurs(ms => ms.filter(x => x.id !== m.id))}
+              aria-label={`Minuteur ${m.libelle}, toucher pour arrêter`}>⏱ {m.sonne ? 'Terminé !' : reste(m)} · {m.libelle}</button>)}
+          </div>}
           {phases.map(({ ph, taches }, rang) => (
             <div key={ph}>
               <h3 style={{ margin: '14px 0 4px' }}>{rang + 1}. {TITRES_PHASES[ph]}</h3>
-              {taches.map(t => <Etape key={t.id} t={t} faite={faites.includes(t.id)} onBasculer={() => basculer(t.id)} />)}
+              {taches.map(t => <Etape key={t.id} t={t} faite={faites.includes(t.id)} enCours={ecoute.actif && courante?.id === t.id} onMinuteur={() => lancerMinuteur(t)} onBasculer={() => basculer(t.id)} />)}
             </div>
           ))}
           {faites.length > 0 && <button className="lien" onClick={() => { setFaites([]); localStorage.removeItem(cle); }}>Tout décocher</button>}
@@ -114,16 +176,16 @@ export default function Batch() {
   );
 }
 
-function Etape({ t, faite, onBasculer }: { t: Tache; faite: boolean; onBasculer: () => void }) {
+function Etape({ t, faite, enCours, onBasculer, onMinuteur }: { t: Tache; faite: boolean; enCours: boolean; onBasculer: () => void; onMinuteur: () => void }) {
   return (
-    <label className={'article' + (faite ? ' coche' : '')} style={{ alignItems: 'start', paddingTop: 10, paddingBottom: 10 }}>
+    <label className={'article' + (faite ? ' coche' : '') + (enCours ? ' en-cours' : '')} style={{ alignItems: 'start', paddingTop: 10, paddingBottom: 10 }}>
       <input type="checkbox" checked={faite} onChange={onBasculer} style={{ marginTop: 2 }} />
       <span className="article-nom">
         {t.plat && <span className="etiquette" style={{ marginRight: 6 }}>{t.plat}</span>}
         {t.texte}
         {t.attente && t.minutes ? <span className="doux petit"> · cuit seul {duree(Math.round(t.minutes))}, passer à la suite</span> : null}
       </span>
-      <span />
+      {t.minutes ? <button type="button" className="corbeille" aria-label={`Lancer un minuteur de ${duree(Math.round(t.minutes))}`} onClick={e => { e.preventDefault(); onMinuteur(); }}>⏱</button> : <span />}
     </label>
   );
 }
