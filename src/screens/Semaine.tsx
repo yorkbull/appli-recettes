@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store';
-import { MOMENTS, MOMENT_LABEL, type Case, type Moment } from '../types';
+import { MOMENTS, MOMENT_LABEL, sansCoche, type Case, type Moment } from '../types';
 import { ajouterJours, aujourdhui, dateLongue, depuisIso, joursSemaine, lundi, nomJour, titreSemaine } from '../lib/dates';
 import { Feuille, Icone, toast, useAppuiLong } from '../ui';
 import Choisir from './Choisir';
@@ -39,7 +39,7 @@ export default function Semaine() {
         for (const m of MOMENTS) {
           const src = p[d]?.[m];
           if (src && !p[jours[i]]?.[m] && (src.type !== 'recette' && src.type !== 'restes' || parId[src.recetteId])) {
-            c[jours[i]] = { ...(c[jours[i]] ?? {}), [m]: src }; n++;
+            c[jours[i]] = { ...(c[jours[i]] ?? {}), [m]: sansCoche(src) }; n++;
           }
         }
       });
@@ -52,7 +52,7 @@ export default function Semaine() {
     if (mode) {
       const src = planning[mode.depuis.date]?.[mode.depuis.moment];
       if (src && !(pos.date === mode.depuis.date && pos.moment === mode.depuis.moment)) {
-        mettreCase(pos.date, pos.moment, src);
+        mettreCase(pos.date, pos.moment, mode.type === 'copier' ? sansCoche(src) : src);
         if (mode.type === 'deplacer') mettreCase(mode.depuis.date, mode.depuis.moment, null);
         toast(mode.type === 'deplacer' ? 'Repas déplacé' : 'Repas copié');
       }
@@ -131,8 +131,9 @@ export default function Semaine() {
 
 type PropsCase = { date: string; moment: Moment; c?: Case; cible: boolean; onToucher: () => void; onLong: () => void; onVider: () => void };
 
-const decrire = (c: Case | undefined, parId: Record<string, { titre: string }>) => {
+const decrire = (c: Case | undefined, parId: Record<string, { titre: string }>): string => {
   if (!c) return 'rien de prévu';
+  if (c.mange) return `${decrire({ ...c, mange: false }, parId)}, déjà mangé`;
   if (c.type === 'dehors') return 'Repas dehors';
   if (c.type === 'note') return c.texte;
   const r = parId[c.recetteId];
@@ -146,8 +147,8 @@ function CaseRepas({ date, moment, c, cible, onToucher, onLong, onVider }: Props
   const texte = decrire(c, parId);
   return (
     <div className={'case' + (cible ? ' cible' : '')}>
-      <button className={'case-titre' + (c ? '' : ' vide')} {...appui} aria-label={`${MOMENT_LABEL[moment]}, ${dateLongue(date)} : ${texte}`}>
-        {c ? texte : '+ Choisir'}
+      <button className={'case-titre' + (c ? '' : ' vide') + (c?.mange ? ' mange' : '')} {...appui} aria-label={`${MOMENT_LABEL[moment]}, ${dateLongue(date)} : ${texte}`}>
+        {c ? (c.mange ? `✓ ${decrire({ ...c, mange: false }, parId)}` : texte) : '+ Choisir'}
       </button>
       {c && (
         <div className="case-pied">
@@ -168,7 +169,8 @@ function LigneRepas({ date, moment, c, cible, onToucher, onLong, onVider }: Prop
     <div className="ligne-repas">
       <button className="case-ligne" {...appui} aria-label={`${MOMENT_LABEL[moment]}, ${dateLongue(date)} : ${decrire(c, parId)}`}>
         <span className="moment">{MOMENT_LABEL[moment]}</span>
-        <span className="contenu">
+        <span className={'contenu' + (c?.mange ? ' mange' : '')}>
+          {c?.mange && <span aria-hidden="true">✓</span>}
           {!c && <span className="vide">+ Choisir</span>}
           {c?.type === 'dehors' && <span>Repas dehors</span>}
           {c?.type === 'note' && <span>{c.texte}</span>}
@@ -204,6 +206,9 @@ function MenuCase({ pos, onFermer, onMode }: { pos: Position; onFermer: () => vo
       {r && <button className="action" onClick={() => aller(`/recette/${r.id}?portions=${'portions' in c ? c.portions : r.portions}`)}>Voir la recette</button>}
       <button className="action" onClick={() => onMode('deplacer')}>Déplacer</button>
       <button className="action" onClick={() => onMode('copier')}>Copier vers une autre case</button>
+      <button className="action" onClick={() => { mettreCase(pos.date, pos.moment, c.mange ? sansCoche(c) : { ...c, mange: true }); toast(c.mange ? 'Repas à manger' : 'Repas marqué comme mangé'); onFermer(); }}>
+        {c.mange ? 'Pas encore mangé' : 'Marquer comme mangé'}
+      </button>
       {c.type === 'recette' && <button className="action" onClick={restes}>Faire des restes pour {nomJour(demain)} midi</button>}
       {'portions' in c && (
         <div className="action" style={{ justifyContent: 'space-between' }}>

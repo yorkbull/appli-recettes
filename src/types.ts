@@ -22,11 +22,16 @@ export interface Recette {
   modifieLe: string;
 }
 
-export type Case =
+// mange : repas coché comme déjà mangé (la coche suit le repas quand on le déplace)
+export type Case = (
   | { type: 'recette'; recetteId: string; portions: number }
   | { type: 'restes'; recetteId: string; portions: number }
   | { type: 'dehors' }
-  | { type: 'note'; texte: string };
+  | { type: 'note'; texte: string }
+) & { mange?: boolean };
+
+// Copie d'un repas vers une autre case : la copie n'est pas encore mangée
+export const sansCoche = (c: Case): Case => { const n = { ...c }; delete n.mange; return n; };
 
 // planning : date ISO (AAAA-MM-JJ) -> moment -> case
 export type Planning = Record<string, Partial<Record<Moment, Case>>>;
