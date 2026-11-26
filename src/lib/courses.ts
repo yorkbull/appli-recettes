@@ -102,16 +102,23 @@ function formaterQuantite(v: number, unite: string): string {
   return unite ? `${formater(n)} ${unite.startsWith('c. à') ? unite : pluriel(unite, n)}` : formater(n);
 }
 
+// Repas « recette » de la semaine, une seule fois par recette : un plat prévu plusieurs fois, ce sont des restes,
+// ses ingrédients ne s'achètent qu'une fois (on garde le plus grand nombre de portions prévu)
+function repasUniques(jours: string[], planning: Planning, parId: Record<string, Recette>): { r: Recette; facteur: number }[] {
+  const portions = new Map<string, number>();
+  for (const d of jours) for (const m of MOMENTS) {
+    const c = planning[d]?.[m];
+    if (!c || c.type !== 'recette' || !parId[c.recetteId]) continue; // les restes sont déjà comptés avec le repas d'origine
+    portions.set(c.recetteId, Math.max(portions.get(c.recetteId) ?? 0, c.portions));
+  }
+  return [...portions].map(([id, p]) => ({ r: parId[id], facteur: p / (parId[id].portions || 1) }));
+}
+
 export function listeCourses(jours: string[], planning: Planning, parId: Record<string, Recette>): { articles: Article[]; recettes: string[] } {
   const total = new Map<string, { nom: string; parUnite: Map<string, number | null> }>();
   const recettes = new Set<string>();
-  for (const d of jours) for (const m of MOMENTS) {
-    const c = planning[d]?.[m];
-    if (!c || c.type !== 'recette') continue; // les restes sont déjà comptés avec le repas d'origine
-    const r = parId[c.recetteId];
-    if (!r) continue;
+  for (const { r, facteur } of repasUniques(jours, planning, parId)) {
     recettes.add(r.titre);
-    const facteur = c.portions / (r.portions || 1);
     for (const ligne of r.ingredients) for (const a of lireLigne(ligne, facteur)) {
       const cle = cleDe(a.nom);
       if (!cle) continue;
@@ -141,11 +148,6 @@ export function texteCourses(titre: string, articles: Article[]): string {
 // Lignes d'ingrédients des repas prévus (avec le facteur de portions), pour estimer le coût de la liste
 export function lignesPrevues(jours: string[], planning: Planning, parId: Record<string, Recette>): { ligne: string; facteur: number }[] {
   const out: { ligne: string; facteur: number }[] = [];
-  for (const d of jours) for (const m of MOMENTS) {
-    const c = planning[d]?.[m];
-    if (!c || c.type !== 'recette') continue;
-    const r = parId[c.recetteId];
-    if (r) for (const ligne of r.ingredients) out.push({ ligne, facteur: c.portions / (r.portions || 1) });
-  }
+  for (const { r, facteur } of repasUniques(jours, planning, parId)) for (const ligne of r.ingredients) out.push({ ligne, facteur });
   return out;
 }
