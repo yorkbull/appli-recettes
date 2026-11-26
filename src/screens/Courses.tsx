@@ -5,10 +5,15 @@ import { cleDe, lignesPrevues, listeCourses, rayonDe, RAYONS, texteCourses, type
 import { cout } from '../lib/prix';
 import { ResumeCout } from '../Prix';
 import { Icone, toast } from '../ui';
+import { aLaMaison } from '../lib/frigo';
 
 // Liste de courses de la semaine, cochable, rangée par rayon, à copier ou partager vers une note
 export default function Courses() {
-  const { planning, parId, prix } = useStore();
+  const { planning, parId, prix, reglages, modifierReglages } = useStore();
+  const frigo = useMemo(() => reglages.frigo ?? [], [reglages.frigo]);
+  const [nouveauFrigo, setNouveauFrigo] = useState('');
+  const ajouterFrigo = (nom: string) => { const n = nom.trim().replace(/^./, c => c.toUpperCase()); if (n && !aLaMaison(n, frigo)) modifierReglages({ frigo: [...frigo, n] }); };
+  const retirerFrigo = (nom: string) => modifierReglages({ frigo: frigo.filter(f => f !== nom) });
   const auj = aujourdhui();
   const [debut, setDebut] = useState(() => lundi(auj));
   const cleCoches = `courses-coches-${debut}`;
@@ -34,10 +39,13 @@ export default function Courses() {
 
   const prevus = useMemo(() => listeCourses(joursSemaine(debut), planning, parId), [debut, planning, parId]);
   const recettes = prevus.recettes;
-  const articles: Article[] = useMemo(() => [
+  const tous: Article[] = useMemo(() => [
     ...prevus.articles,
     ...libres.map(nom => ({ cle: 'libre:' + cleDe(nom), nom, quantite: '', rayon: rayonDe(nom), libre: true })),
   ].sort((a, b) => a.nom.localeCompare(b.nom, 'fr')), [prevus, libres]);
+  // Ce qui est déjà au frigo ou au placard ne s'achète pas
+  const articles = useMemo(() => tous.filter(a => a.libre || !aLaMaison(a.nom, frigo)), [tous, frigo]);
+  const maison = useMemo(() => tous.filter(a => !a.libre && aLaMaison(a.nom, frigo)), [tous, frigo]);
   const coutSemaine = useMemo(() => cout(lignesPrevues(joursSemaine(debut), planning, parId), prix), [debut, planning, parId, prix]);
   const aAcheter = articles.filter(a => !coches.includes(a.cle));
   const titre = `Courses ${titreSemaine(debut)}`;
@@ -98,6 +106,8 @@ export default function Courses() {
                   <input type="checkbox" checked={coches.includes(a.cle)} onChange={() => basculer(a.cle)} />
                   <span className="article-nom">{a.nom}</span>
                   {a.quantite && <span className="article-qte">{a.quantite}</span>}
+                  {!a.libre && <button type="button" className="corbeille" aria-label={`${a.nom} : déjà à la maison`} title="Déjà à la maison"
+                    onClick={e => { e.preventDefault(); ajouterFrigo(a.nom); toast(`${a.nom} : noté au frigo ou au placard`); }}>{Icone.maison}</button>}
                   {a.libre && <button type="button" className="corbeille" aria-label={`Retirer ${a.nom} de la liste`}
                     onClick={e => { e.preventDefault(); changerLibres(libres.filter(l => 'libre:' + cleDe(l) !== a.cle)); }}>{Icone.corbeille}</button>}
                 </label>
@@ -114,6 +124,18 @@ export default function Courses() {
           </section>
         )}
       </>}
+      <section className="carte">
+        <h2>Frigo et placard <span className="doux petit">{frigo.length}</span></h2>
+        <p className="doux petit" style={{ marginTop: 0 }}>Ce qui est déjà à la maison sort de la liste de courses. Touchez la petite maison sur un article pour l’ajouter ici.</p>
+        {maison.length > 0 && <p className="petit">Pas besoin d’acheter cette semaine : {maison.map(a => a.nom + (a.quantite ? ` (${a.quantite})` : '')).join(', ')}.</p>}
+        <div className="pastilles wrap">
+          {frigo.map(f => <button key={f} className="pastille petite" aria-label={`Retirer ${f} du frigo`} onClick={() => retirerFrigo(f)}>{f} ✕</button>)}
+        </div>
+        <form className="ligne-reglage" style={{ borderBottom: 0 }} onSubmit={e => { e.preventDefault(); ajouterFrigo(nouveauFrigo); setNouveauFrigo(''); }}>
+          <input type="text" placeholder="Ajouter (riz, œufs, crème…)" aria-label="Ajouter un produit déjà à la maison" value={nouveauFrigo} onChange={e => setNouveauFrigo(e.target.value)} />
+          <button className="btn" type="submit" disabled={!nouveauFrigo.trim()}>Ajouter</button>
+        </form>
+      </section>
     </div>
   );
 }

@@ -204,7 +204,7 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 /* Courses */
 .rayon { padding: 12px 16px 6px; }
 .rayon h2 { display: flex; justify-content: space-between; align-items: baseline; }
-.article { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 10px; min-height: 48px; border-top: 1px solid var(--ligne); cursor: pointer; }
+.article { display: grid; grid-template-columns: 28px 1fr auto auto; align-items: center; gap: 10px; min-height: 48px; border-top: 1px solid var(--ligne); cursor: pointer; }
 .article input { width: 22px; height: 22px; accent-color: var(--accent); }
 .article-qte { color: var(--texte-doux); font-size: .9rem; white-space: nowrap; }
 .article.coche .article-nom, .article.coche .article-qte { text-decoration: line-through; color: var(--texte-doux); }
@@ -226,3 +226,5 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 /* Goûts et allergies */
 .alerte-gout { margin: 0 0 8px; padding: 10px 14px; border-radius: var(--rayon); background: #fbeee6; color: var(--texte); font-size: .95rem; }
 .meta-gout { color: var(--danger, #a33); }
+.etiquette.saison, .meta-saison { color: var(--ok); }
+.etiquette.saison { background: #e7efe4; }

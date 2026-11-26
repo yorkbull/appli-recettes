@@ -4,6 +4,8 @@ import { Icone, toast } from '../ui';
 import { duree } from '../lib/quantites';
 import { EXEMPLES } from '../exemples';
 import { conflits, resumeConflits } from '../lib/gouts';
+import { manquants } from '../lib/frigo';
+import { deSaison } from '../lib/saison';
 
 export const normaliser = (s: string) => s.replace(/œ/g, 'oe').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -11,6 +13,8 @@ export default function Recettes() {
   const { recettes, reglages, enregistrerRecette } = useStore();
   const [q, setQ] = useState(() => sessionStorage.getItem('recherche') ?? '');
   const [filtres, setFiltres] = useState<string[]>([]);
+  const frigo = useMemo(() => reglages.frigo ?? [], [reglages.frigo]);
+  const avecMaison = filtres.includes('Avec ce que j’ai');
   const basculer = (f: string) => setFiltres(x => x.includes(f) ? x.filter(y => y !== f) : [...x, f]);
 
   const liste = useMemo(() => {
@@ -23,8 +27,9 @@ export default function Recettes() {
         if (reglages.thematiques.includes(f) && !r.thematiques.includes(f)) return false;
       }
       return true;
-    }).sort((a, b) => a.titre.localeCompare(b.titre, 'fr'));
-  }, [recettes, q, filtres, reglages.thematiques]);
+    }).filter(r => !filtres.includes('De saison') || deSaison(r).saison)
+      .sort((a, b) => avecMaison ? manquants(a, frigo).length - manquants(b, frigo).length || a.titre.localeCompare(b.titre, 'fr') : a.titre.localeCompare(b.titre, 'fr'));
+  }, [recettes, q, filtres, reglages.thematiques, avecMaison, frigo]);
 
   const ajouterExemples = async () => {
     for (const e of EXEMPLES()) await enregistrerRecette(e);
@@ -46,7 +51,7 @@ export default function Recettes() {
       <div className="recherche">{Icone.loupe}<input type="search" placeholder="Nom ou ingrédient" value={q} aria-label="Chercher une recette"
         onChange={e => { setQ(e.target.value); sessionStorage.setItem('recherche', e.target.value); }} /></div>
       <div className="pastilles" role="group" aria-label="Filtres">
-        {['♥ Favoris', 'Moins de 20 min', ...reglages.thematiques].map(f => (
+        {['♥ Favoris', 'Moins de 20 min', 'De saison', ...(frigo.length ? ['Avec ce que j’ai'] : []), ...reglages.thematiques].map(f => (
           <button key={f} className={'pastille' + (filtres.includes(f) ? ' on' : '')} aria-pressed={filtres.includes(f)} onClick={() => basculer(f)}>{f}</button>
         ))}
       </div>
@@ -57,6 +62,8 @@ export default function Recettes() {
             <span>
               <b>{r.favori ? '♥ ' : ''}{r.titre}</b>
               <span className="meta">{[r.thematiques.join(', '), duree((r.preparationMin ?? 0) + (r.cuissonMin ?? 0))].filter(Boolean).join(' · ')}</span>
+              {deSaison(r).saison && <span className="meta meta-saison">De saison</span>}
+              {avecMaison && <span className="meta">{manquants(r, frigo).length ? `Il manque : ${manquants(r, frigo).join(', ')}` : 'Tout est à la maison'}</span>}
               {conflits(r, reglages.gouts ?? []).length > 0 && <span className="meta meta-gout">Pas pour : {resumeConflits(conflits(r, reglages.gouts ?? []))}</span>}
             </span>
           </a>

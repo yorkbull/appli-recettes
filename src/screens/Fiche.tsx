@@ -7,6 +7,7 @@ import { cout } from '../lib/prix';
 import { ResumeCout } from '../Prix';
 import { nutrition } from '../lib/nutrition';
 import { conflits } from '../lib/gouts';
+import { deSaison } from '../lib/saison';
 
 // Nom du site d'origine ; une adresse mal formée (fichier reçu, ancienne version) ne doit pas faire planter la fiche
 const nomSite = (url: string) => { try { return new URL(url).hostname; } catch { return url; } };
@@ -40,6 +41,7 @@ export default function Fiche({ id }: { id: string }) {
         {r.preparationMin ? <span>Préparation {duree(r.preparationMin)}</span> : null}
         {r.cuissonMin ? <span>Cuisson {duree(r.cuissonMin)}</span> : null}
         {r.thematiques.map(t => <span key={t} className="etiquette">{t}</span>)}
+        {deSaison(r).saison && <span className="etiquette saison">De saison</span>}
       </div>
 
       {conflits(r, reglages.gouts ?? []).map(c => (
@@ -47,6 +49,8 @@ export default function Fiche({ id }: { id: string }) {
           <b>{c.gout.personne}</b> {c.gout.allergie ? 'est allergique' : 'n’aime pas'} : {c.ingredients.join(', ')}
         </p>
       ))}
+
+      {deSaison(r).hors.length > 0 && <p className="doux petit" style={{ marginTop: 0 }}>Hors saison en ce moment : {deSaison(r).hors.join(', ')}.</p>}
 
       <div className="portions"><span>Portions</span><Compteur valeur={portions} onChange={setPortions} libelle="Portions" /></div>
 
