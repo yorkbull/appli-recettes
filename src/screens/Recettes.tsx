@@ -3,6 +3,7 @@ import { useStore } from '../store';
 import { Icone, toast } from '../ui';
 import { duree } from '../lib/quantites';
 import { EXEMPLES } from '../exemples';
+import { conflits, resumeConflits } from '../lib/gouts';
 
 export const normaliser = (s: string) => s.replace(/œ/g, 'oe').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -56,6 +57,7 @@ export default function Recettes() {
             <span>
               <b>{r.favori ? '♥ ' : ''}{r.titre}</b>
               <span className="meta">{[r.thematiques.join(', '), duree((r.preparationMin ?? 0) + (r.cuissonMin ?? 0))].filter(Boolean).join(' · ')}</span>
+              {conflits(r, reglages.gouts ?? []).length > 0 && <span className="meta meta-gout">Pas pour : {resumeConflits(conflits(r, reglages.gouts ?? []))}</span>}
             </span>
           </a>
         ))}

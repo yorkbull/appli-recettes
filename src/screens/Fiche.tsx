@@ -6,12 +6,13 @@ import { aller } from '../App';
 import { cout } from '../lib/prix';
 import { ResumeCout } from '../Prix';
 import { nutrition } from '../lib/nutrition';
+import { conflits } from '../lib/gouts';
 
 // Nom du site d'origine ; une adresse mal formée (fichier reçu, ancienne version) ne doit pas faire planter la fiche
 const nomSite = (url: string) => { try { return new URL(url).hostname; } catch { return url; } };
 
 export default function Fiche({ id }: { id: string }) {
-  const { parId, enregistrerRecette, supprimerRecette, prix } = useStore();
+  const { parId, enregistrerRecette, supprimerRecette, prix, reglages } = useStore();
   const r = parId[id];
   const depart = Number(new URLSearchParams(location.hash.split('?')[1] ?? '').get('portions')) || r?.portions || 1;
   const [portions, setPortions] = useState(depart);
@@ -40,6 +41,12 @@ export default function Fiche({ id }: { id: string }) {
         {r.cuissonMin ? <span>Cuisson {duree(r.cuissonMin)}</span> : null}
         {r.thematiques.map(t => <span key={t} className="etiquette">{t}</span>)}
       </div>
+
+      {conflits(r, reglages.gouts ?? []).map(c => (
+        <p key={c.gout.id} className="alerte-gout" role="note">
+          <b>{c.gout.personne}</b> {c.gout.allergie ? 'est allergique' : 'n’aime pas'} : {c.ingredients.join(', ')}
+        </p>
+      ))}
 
       <div className="portions"><span>Portions</span><Compteur valeur={portions} onChange={setPortions} libelle="Portions" /></div>
 

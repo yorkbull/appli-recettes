@@ -39,14 +39,25 @@ export type Planning = Record<string, Partial<Record<Moment, Case>>>;
 // Prix relevés en magasin : « produit|unité » -> euros le kg (g), le litre (ml) ou par pièce/unité comptée
 export type Prix = Record<string, number>;
 
+// Goût à respecter : « Marion n'aime pas le fromage, sauf la mozzarella », « allergie aux arachides »
+export interface Gout { id: string; personne: string; mot: string; sauf: string; allergie: boolean }
+
 export interface Reglages {
   nomAppli: string;
   thematiques: string[];
   portionsParDefaut: number;
+  gouts: Gout[];
+  frigo: string[]; // produits déjà à la maison (frigo, placard)
 }
 
 export const REGLAGES_DEFAUT: Reglages = {
   nomAppli: 'Mes recettes',
   thematiques: ['Sandwich', 'Sur le pouce', 'Viande', 'Poisson', 'Végétarien'],
   portionsParDefaut: 2,
+  gouts: [
+    { id: 'g1', personne: 'Marion', mot: 'fromage', sauf: 'mozzarella', allergie: false },
+    { id: 'g2', personne: 'Marion', mot: 'champignons', sauf: '', allergie: false },
+    { id: 'g3', personne: 'Charles', mot: 'fruits de mer', sauf: '', allergie: false },
+  ],
+  frigo: [],
 };

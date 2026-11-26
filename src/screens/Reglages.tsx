@@ -3,6 +3,7 @@ import { useStore } from '../store';
 import { Compteur, Feuille, toast } from '../ui';
 import { demanderPersistance, type Sauvegarde } from '../db';
 import Suggestions from '../Suggestions';
+import Gouts from '../Gouts';
 import { fusionner } from '../lib/fusion';
 import { avecPhotos, garderAvantRetour, lireAvantRetour, lireHistorique, nbRepas, type Instantane } from '../lib/historique';
 
@@ -79,6 +80,8 @@ export default function Reglages() {
       <div className="carte">
         <div className="portions" style={{ margin: 0, border: 0, padding: 0 }}><span>Portions par défaut</span><Compteur valeur={reglages.portionsParDefaut} onChange={v => modifierReglages({ portionsParDefaut: v })} libelle="Portions par défaut" /></div>
       </div>
+
+      <Gouts />
 
       <div className="carte">
         <h2>Thématiques</h2>

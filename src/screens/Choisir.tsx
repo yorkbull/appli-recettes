@@ -5,6 +5,7 @@ import { ajouterJours, dateLongue } from '../lib/dates';
 import { Compteur, Feuille, Icone, toast } from '../ui';
 import { aller } from '../App';
 import { normaliser } from './Recettes';
+import { conflits, resumeConflits } from '../lib/gouts';
 
 // Choisir une recette pour une case du planning : suggestions adaptées au moment, puis celles pas faites depuis longtemps
 export default function Choisir({ date, moment, onFermer }: { date: string; moment: Moment; onFermer: () => void }) {
@@ -16,11 +17,12 @@ export default function Choisir({ date, moment, onFermer }: { date: string; mome
     const score = (r: Recette) => {
       const adapte = r.moments.length === 0 || r.moments.includes(moment) ? 0 : 1;
       const d = derniereFois(r.id);
-      return [adapte, r.favori ? 0 : 1, d ?? '0000'] as const;
+      const gene = conflits(r, reglages.gouts ?? []).length ? 1 : 0; // ce que quelqu'un ne mange pas passe en dernier
+      return [adapte + gene * 2, r.favori ? 0 : 1, d ?? '0000'] as const;
     };
     const liste = recettes.filter(r => !q || normaliser(r.titre + ' ' + r.ingredients.join(' ') + ' ' + r.thematiques.join(' ')).includes(normaliser(q)));
     return liste.map(r => ({ r, s: score(r) })).sort((a, b) => a.s[0] - b.s[0] || a.s[1] - b.s[1] || a.s[2].localeCompare(b.s[2]) || a.r.titre.localeCompare(b.r.titre)).map(x => x.r);
-  }, [recettes, q, moment, derniereFois]);
+  }, [recettes, q, moment, derniereFois, reglages.gouts]);
 
   // Restes possibles : recettes prévues la veille ou l'avant-veille
   const restesPossibles = useMemo(() => {
@@ -54,7 +56,7 @@ export default function Choisir({ date, moment, onFermer }: { date: string; mome
           {triees.slice(0, q ? 50 : 20).map(r => (
             <button key={r.id} className="ligne-recette" onClick={() => choisir(r)}>
               {r.photo ? <img src={r.photo} alt="" /> : <span className="sans-photo">{r.titre[0]}</span>}
-              <span><b>{r.favori ? '♥ ' : ''}{r.titre}</b><span className="meta">{ilYa(derniereFois(r.id))}</span></span>
+              <span><b>{r.favori ? '♥ ' : ''}{r.titre}</b><span className="meta">{ilYa(derniereFois(r.id))}</span>{conflits(r, reglages.gouts ?? []).length > 0 && <span className="meta meta-gout">Pas pour : {resumeConflits(conflits(r, reglages.gouts ?? []))}</span>}</span>
             </button>
           ))}
           {!triees.length && <p className="doux">Aucune recette ne correspond.</p>}

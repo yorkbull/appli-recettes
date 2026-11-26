@@ -222,3 +222,7 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 .photo-choix input { position: absolute; inset: 0; opacity: 0; }
 .deux { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* Goûts et allergies */
+.alerte-gout { margin: 0 0 8px; padding: 10px 14px; border-radius: var(--rayon); background: #fbeee6; color: var(--texte); font-size: .95rem; }
+.meta-gout { color: var(--danger, #a33); }

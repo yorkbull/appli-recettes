@@ -45,5 +45,11 @@ export function fusionner(ici: Sauvegarde, recu: Sauvegarde): { s: Sauvegarde; b
   const thematiques = [...ici.reglages.thematiques];
   for (const t of recu.reglages?.thematiques ?? []) if (!thematiques.includes(t)) thematiques.push(t);
 
-  return { s: { version: 1, date: new Date().toISOString(), recettes, planning, reglages: { ...ici.reglages, thematiques }, prix }, bilan };
+  const cleGout = (g: { personne: string; mot: string }) => titreCle(g.personne + '|' + g.mot);
+  const gouts = [...(ici.reglages.gouts ?? [])];
+  for (const g of recu.reglages?.gouts ?? []) if (!gouts.some(x => cleGout(x) === cleGout(g))) gouts.push(g);
+  const frigo = [...(ici.reglages.frigo ?? [])];
+  for (const f of recu.reglages?.frigo ?? []) if (!frigo.some(x => titreCle(x) === titreCle(f))) frigo.push(f);
+
+  return { s: { version: 1, date: new Date().toISOString(), recettes, planning, reglages: { ...ici.reglages, thematiques, gouts, frigo }, prix }, bilan };
 }
