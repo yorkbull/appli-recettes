@@ -258,3 +258,11 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 .batch-valider:active { transform: scale(.94); background: #b71c1c; }
 .batch-annuler { width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--ligne); background: var(--surface); color: var(--texte); font-size: 1.5rem; box-shadow: var(--ombre); }
 .batch-annuler.vide { visibility: hidden; }
+.case-pied .plus-plat { width: 30px; font-size: 1.25rem; font-weight: 700; color: var(--accent); }
+.batch-valider.minute { background: conic-gradient(#d32f2f var(--avance, 0%), #f3c4c4 0); color: #fff; }
+.batch-valider.minute span { font-size: 1.35rem; text-shadow: 0 1px 3px rgba(0,0,0,.5); }
+.batch-valider.minute small { text-shadow: 0 1px 3px rgba(0,0,0,.5); }
+.batch-valider.sonne { animation: clignote 0.8s infinite; background: #d32f2f; }
+.case-pour { padding: 0 6px; font-size: .7rem; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--accent); }
+.case-pied > span { white-space: nowrap; overflow: hidden; }
+.case-pied .corbeille { width: 28px; }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { ajusterLigne, minuteurs } from '../lib/quantites';
 import { conseilInduction } from '../lib/induction';
+import { arreterSonnerie, deverrouillerSon, sonner } from '../lib/sonnerie';
 import { Feuille, Icone } from '../ui';
 
 type Minuteur = { cle: string; fin: number; total: number; libelle: string };
@@ -31,10 +32,11 @@ export default function Cuisine({ id }: { id: string }) {
     if (!mins.length) return;
     const t = setInterval(() => {
       tic(x => x + 1);
-      for (const m of mins) if (Date.now() >= m.fin && !sonnes.current.has(m.cle)) { sonnes.current.add(m.cle); alerte(); }
+      for (const m of mins) if (Date.now() >= m.fin && !sonnes.current.has(m.cle)) { sonnes.current.add(m.cle); sonner(); }
     }, 500);
     return () => clearInterval(t);
   }, [mins]);
+  useEffect(() => () => arreterSonnerie(), []); // sonnerie coupée en quittant le mode cuisine
 
   if (!r) return <div className="page"><p>Recette introuvable.</p><a href="#/recettes">Mes recettes</a></div>;
   const n = r.etapes.length;
@@ -42,6 +44,7 @@ export default function Cuisine({ id }: { id: string }) {
   const quitter = () => (history.length > 1 ? history.back() : (location.hash = `/recette/${r.id}`));
 
   const lancer = (cle: string, secondes: number, libelle: string) => {
+    deverrouillerSon();
     setMins(ms => ms.some(m => m.cle === cle) ? ms.filter(m => m.cle !== cle) : [...ms, { cle, fin: Date.now() + secondes * 1000, total: secondes, libelle }]);
     sonnes.current.delete(cle);
   };
@@ -56,7 +59,7 @@ export default function Cuisine({ id }: { id: string }) {
       </div>
       <div className="progression" aria-hidden><i style={{ width: `${n ? ((i + 1) / n) * 100 : 0}%` }} /></div>
       {mins.length > 0 && (
-        <div>{mins.map(m => <button key={m.cle} className={'minuteur ' + (Date.now() >= m.fin ? 'fini' : 'encours')} onClick={() => setMins(ms => ms.filter(x => x.cle !== m.cle))}
+        <div>{mins.map(m => <button key={m.cle} className={'minuteur ' + (Date.now() >= m.fin ? 'fini' : 'encours')} onClick={() => { arreterSonnerie(); setMins(ms => ms.filter(x => x.cle !== m.cle)); }}
           aria-label={`Minuteur ${m.libelle}, toucher pour arrêter`}>⏱ {Date.now() >= m.fin ? 'Terminé !' : reste(m)} · {m.libelle}</button>)}</div>
       )}
       <div className="cuisine-etape" aria-live="polite">
@@ -81,12 +84,4 @@ export default function Cuisine({ id }: { id: string }) {
       )}
     </div>
   );
-}
-
-function alerte() {
-  navigator.vibrate?.([400, 200, 400, 200, 400]);
-  try {
-    const ctx = new AudioContext();
-    [0, 0.35, 0.7].forEach(t => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.frequency.value = 880; g.gain.value = 0.2; o.connect(g).connect(ctx.destination); o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.2); });
-  } catch { /* pas de son disponible */ }
 }

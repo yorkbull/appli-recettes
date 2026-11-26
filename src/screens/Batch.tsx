@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { aujourdhui } from '../lib/dates';
 import { MOMENT_LABEL } from '../types';
@@ -7,7 +7,7 @@ import { duree } from '../lib/quantites';
 import { conservation, libelleRepas, periodeSession, planCuisine, planningSession, platsSession, prochaineSession, repasCouverts, texteDuree, titreSession, TITRES_PHASES, type Tache } from '../lib/batch';
 import { Icone, toast } from '../ui';
 import { conseilInduction } from '../lib/induction';
-import { alerte } from '../lib/sonnerie';
+import { arreterSonnerie, deverrouillerSon, ecranAllume, sonner } from '../lib/sonnerie';
 
 // Batch cooking : session du dimanche (repas jusqu'au mercredi midi) et du mercredi (jusqu'au vendredi midi)
 export default function Batch() {
@@ -32,50 +32,88 @@ export default function Batch() {
   const ordre = useMemo(() => ([1, 2, 3, 4, 5] as const).flatMap(ph => plan.taches.filter(t => t.phase === ph)), [plan]);
   const courante = ordre.find(t => !faites.includes(t.id));
 
-  // Minuteurs de cuisson
-  type Minuteur = { id: string; fin: number; libelle: string; sonne?: boolean };
-  const [minuteurs, setMinuteurs] = useState<Minuteur[]>([]);
+  // Minuteurs de cuisson, gardés sur le téléphone (un rechargement ne les perd pas).
+  // « etape » : minuteur de l'étape en cours, qui la valide quand il se termine ;
+  // les autres tournent en haut de l'écran pendant qu'on passe à la suite (cuisson longue).
+  type Minuteur = { id: string; fin: number; libelle: string; etape?: boolean; sonne?: boolean };
+  const cleMin = `batch-minuteurs-${s.jour}`;
+  const [minuteurs, setMinuteursBrut] = useState<Minuteur[]>([]);
+  useEffect(() => { setMinuteursBrut(JSON.parse(localStorage.getItem(cleMin) ?? '[]')); }, [cleMin]);
+  const setMinuteurs = (f: (ms: Minuteur[]) => Minuteur[]) => setMinuteursBrut(ms => { const n = f(ms); localStorage.setItem(cleMin, JSON.stringify(n)); return n; });
+  const [suivre, setSuivre] = useState(false); // faire remonter l'étape suivante après une validation automatique
   const [, tic] = useState(0);
   useEffect(() => {
-    if (!minuteurs.length) return;
+    if (!minuteurs.some(m => !m.sonne)) return;
     const t = setInterval(() => {
       tic(x => x + 1);
-      setMinuteurs(ms => ms.map(m => {
-        if (m.sonne || Date.now() < m.fin) return m;
-        alerte(); toast(`Minuteur terminé : ${m.libelle}`);
-        return { ...m, sonne: true };
-      }));
-    }, 1000);
+      const finis = minuteursRef.current.filter(m => !m.sonne && Date.now() >= m.fin);
+      if (!finis.length) return;
+      setMinuteurs(ms => ms.map(m => finis.some(x => x.id === m.id) ? { ...m, sonne: true } : m));
+      const ids = finis.filter(m => m.etape).map(m => m.id);
+      if (ids.length) {
+        setFaites(f => { const n = [...f, ...ids.filter(id => !f.includes(id))]; localStorage.setItem(cle, JSON.stringify(n)); return n; });
+        setSuivre(true);
+      }
+      toast(`Minuteur terminé : ${finis.map(m => m.libelle).join(', ')}`);
+    }, 500);
     return () => clearInterval(t);
-  }, [minuteurs.length]);
-  const lancerMinuteur = (t?: Tache) => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minuteurs, cle]);
+  const minuteursRef = useRef(minuteurs);
+  minuteursRef.current = minuteurs;
+  const sonne = minuteurs.some(m => m.sonne);
+  const enCours = minuteurs.some(m => !m.sonne);
+  useEffect(() => { if (sonne) sonner(); else arreterSonnerie(); }, [sonne]);
+  useEffect(() => { ecranAllume(enCours || sonne); }, [enCours, sonne]);
+  useEffect(() => () => { arreterSonnerie(); ecranAllume(false); }, []);
+  const stopSonnerie = () => { deverrouillerSon(); setMinuteurs(ms => ms.filter(m => !m.sonne)); };
+  const lancerMinuteur = (t?: Tache, etape = false) => {
     if (!t?.minutes) return;
-    setMinuteurs(ms => [...ms.filter(m => m.id !== t.id), { id: t.id, fin: Date.now() + t.minutes! * 60000, libelle: t.plat ?? 'cuisson' }]);
+    deverrouillerSon();
+    setMinuteurs(ms => [...ms.filter(m => m.id !== t.id), { id: t.id, fin: Date.now() + t.minutes! * 60000, libelle: t.plat ?? 'cuisson', etape }]);
   };
   const reste = (m: Minuteur) => { const s2 = Math.max(0, Math.round((m.fin - Date.now()) / 1000)); return `${Math.floor(s2 / 60)}:${String(s2 % 60).padStart(2, '0')}`; };
 
-  // Gros bouton rouge : valide l'étape en cours, lance son minuteur s'il y a une cuisson,
-  // puis fait remonter la suivante en haut de l'écran (aucune autre manipulation)
+  // Gros bouton rouge : valide l'étape en cours puis fait remonter la suivante en haut de l'écran.
+  // Étape avec un temps de cuisson : le bouton devient minuteur, l'étape se valide à la fin du temps (et ça sonne).
+  // Cuisson longue qui cuit seule : l'étape se valide tout de suite et son minuteur tourne en haut.
   // place l'étape juste sous la barre du haut et les minuteurs
   const decalageHaut = () => Math.max(64, document.querySelector('.minuteurs-batch')?.getBoundingClientRect().bottom ?? 0) + 10;
   const montrer = (id?: string) => {
     if (!id) return;
     setTimeout(() => { const e = document.getElementById('etape-' + id); if (e) window.scrollBy({ top: e.getBoundingClientRect().top - decalageHaut(), behavior: 'smooth' }); }, 60);
   };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (suivre) { setSuivre(false); if (courante) montrer(courante.id); else toast('Tout est fait. Bravo !'); } }, [suivre, courante]);
+  const minuteurCourant = courante ? minuteurs.find(m => m.id === courante.id && m.etape && !m.sonne) : undefined;
+  // l'étape suivante se fait « pendant ce temps » : on ne bloque pas, le minuteur tourne en haut
+  const enParallele = (() => { const i = courante ? ordre.indexOf(courante) : -1; return i >= 0 && /^\s*pendant (ce temps|la cuisson|que)/i.test(ordre[i + 1]?.texte ?? ''); })();
+  const aMinuter = !!courante?.minutes && !courante.attente && !enParallele;
   const valider = () => {
-    if (!courante) return;
+    deverrouillerSon();
+    if (sonne) { stopSonnerie(); return; }
+    if (!courante || minuteurCourant) return;
     // étape en cours hors de l'écran : le premier appui la montre, sans rien cocher à l'aveugle
     const e = document.getElementById('etape-' + courante.id)?.getBoundingClientRect();
     if (!e || e.top < decalageHaut() - 20 || e.bottom > innerHeight - 160) { montrer(courante.id); return; }
-    const n = [...faites, courante.id]; setFaites(n); localStorage.setItem(cle, JSON.stringify(n));
     navigator.vibrate?.(30);
+    if (aMinuter) { lancerMinuteur(courante, true); return; }
+    const n = [...faites, courante.id]; setFaites(n); localStorage.setItem(cle, JSON.stringify(n));
     if (courante.minutes) lancerMinuteur(courante);
     const suivante = ordre.find(t => !n.includes(t.id));
     if (suivante) montrer(suivante.id); else toast('Tout est fait. Bravo !');
   };
+  // passer l'étape minutée sans attendre la fin (en cas de besoin)
+  const passer = () => {
+    if (!courante) return;
+    setMinuteurs(ms => ms.filter(m => m.id !== courante.id));
+    const n = [...faites, courante.id]; setFaites(n); localStorage.setItem(cle, JSON.stringify(n));
+    montrer(ordre.find(t => !n.includes(t.id))?.id);
+  };
   const annuler = () => {
     const derniere = [...ordre].reverse().find(t => faites.includes(t.id));
     if (!derniere) return;
+    setMinuteurs(ms => ms.filter(m => m.id !== derniere.id));
     const n = faites.filter(x => x !== derniere.id); setFaites(n); localStorage.setItem(cle, JSON.stringify(n));
     montrer(derniere.id);
   };
@@ -142,9 +180,9 @@ export default function Batch() {
 
         <section className="carte">
           <h2>Plan de cuisine</h2>
-          <p className="doux petit" style={{ marginTop: 0 }}>Dans cet ordre, les cuissons longues tournent pendant que vous préparez le reste. Appuyez sur le gros bouton rouge à chaque étape terminée : la suivante remonte en haut de l’écran et les cuissons lancent leur minuteur.</p>
+          <p className="doux petit" style={{ marginTop: 0 }}>Dans cet ordre, les cuissons longues tournent pendant que vous préparez le reste. Appuyez sur le gros bouton rouge à chaque étape terminée : la suivante remonte en haut de l’écran. Quand une étape a un temps de cuisson, le bouton devient minuteur : l’étape se valide à la fin, et ça sonne jusqu’à ce que vous touchiez « Stop ».</p>
           {minuteurs.length > 0 && <div className="minuteurs-batch">
-            {minuteurs.map(m => <button key={m.id} className={'minuteur petit-minuteur ' + (m.sonne ? 'fini' : 'encours')} onClick={() => setMinuteurs(ms => ms.filter(x => x.id !== m.id))}
+            {minuteurs.map(m => <button key={m.id} className={'minuteur petit-minuteur ' + (m.sonne ? 'fini' : 'encours')} onClick={() => { deverrouillerSon(); setMinuteurs(ms => ms.filter(x => x.id !== m.id)); }}
               aria-label={`Minuteur ${m.libelle}, toucher pour arrêter`}>⏱ {m.sonne ? 'Terminé !' : reste(m)} · {m.libelle}</button>)}
           </div>}
           {phases.map(({ ph, taches }, rang) => (
@@ -170,11 +208,16 @@ export default function Batch() {
           <p className="doux petit">Frigo entre 0 et 4 °C : 3 jours maximum pour un plat cuisiné, 2 jours pour le poisson. Au-delà, congeler le jour de la cuisson. Réchauffer une seule fois, bien chaud à cœur. Ne jamais recongeler un plat décongelé.</p>
         </section>
 
-        {courante && (
+        {(courante || sonne) && (
           <div className="batch-boutons">
-            {faites.length > 0 ? <button className="batch-annuler" aria-label="Revenir à l’étape précédente" onClick={annuler}>↶</button> : <span className="batch-annuler vide" />}
-            <button className="batch-valider" onClick={valider} aria-label={`Étape faite : ${courante.texte}`}>✓<small>Fait</small></button>
-            <span className="batch-annuler vide" />
+            {faites.length > 0 && !sonne ? <button className="batch-annuler" aria-label="Revenir à l’étape précédente" onClick={annuler}>↶</button> : <span className="batch-annuler vide" />}
+            {sonne ? <button className="batch-valider sonne" onClick={valider} aria-label="Arrêter la sonnerie">🔔<small>Stop</small></button>
+              : minuteurCourant ? <button className="batch-valider minute" onClick={valider} aria-label={`Minuteur en cours : ${reste(minuteurCourant)}`}
+                style={{ ['--avance' as string]: `${Math.min(100, 100 - (minuteurCourant.fin - Date.now()) / (courante!.minutes! * 600))}%` }}>
+                <span>{reste(minuteurCourant)}</span><small>cuisson</small></button>
+              : aMinuter ? <button className="batch-valider" onClick={valider} aria-label={`Lancer le minuteur de ${duree(Math.round(courante!.minutes!))}`}>⏱<small>{duree(Math.round(courante!.minutes!))}</small></button>
+              : <button className="batch-valider" onClick={valider} aria-label={`Étape faite : ${courante?.texte ?? ''}`}>✓<small>Fait</small></button>}
+            {minuteurCourant ? <button className="batch-annuler" aria-label="Passer sans attendre la fin du minuteur" onClick={passer}>⏭</button> : <span className="batch-annuler vide" />}
           </div>
         )}
       </>}

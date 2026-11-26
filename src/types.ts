@@ -25,7 +25,7 @@ export interface Recette {
 // Autre plat servi au même repas : pour quelqu'un qui ne mange pas le plat prévu (« un plat pour Marion »),
 // ou deuxième plat au choix (personne vide)
 export interface PlatPour { personne: string; recetteId: string; portions: number }
-export const nomPlatPour = (p: { personne: string }) => p.personne ? `Pour ${p.personne}` : '2e plat';
+export const nomPlatPour = (p: { personne: string }) => p.personne ? `Pour ${p.personne}` : 'Autre plat';
 
 // mange : repas coché comme déjà mangé (la coche suit le repas quand on le déplace)
 // pour : plats de remplacement servis au même repas
