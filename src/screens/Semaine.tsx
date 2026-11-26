@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store';
-import { MOMENTS, MOMENT_LABEL, sansCoche, type Case, type Gout, type Moment, type Recette } from '../types';
+import { MOMENTS, MOMENT_LABEL, nomPlatPour, sansCoche, type Case, type Gout, type Moment, type Recette } from '../types';
 import { ajouterJours, aujourdhui, dateLongue, depuisIso, joursSemaine, lundi, nomJour, titreSemaine } from '../lib/dates';
 import { Feuille, Icone, toast, useAppuiLong } from '../ui';
 import Choisir from './Choisir';
@@ -73,10 +73,11 @@ export default function Semaine() {
     const p = c?.pour?.find(x => x.personne === personne);
     if (!c || !p) return;
     const reste = c.pour!.filter(x => x !== p);
-    const n: Case = { ...c, ...('portions' in c ? { portions: c.portions + p.portions } : {}) };
+    // la portion d'une personne revient au plat prévu ; un deuxième plat au choix ne change pas ses portions
+    const n: Case = { ...c, ...('portions' in c && personne ? { portions: c.portions + p.portions } : {}) };
     if (reste.length) n.pour = reste; else delete n.pour;
     mettreCase(pos.date, pos.moment, n);
-    toast(`Plat de ${personne} retiré`);
+    toast(personne ? `Plat de ${personne} retiré` : 'Deuxième plat retiré');
   };
 
   const fermerChoix = useCallback(() => setChoix(null), []);
@@ -166,7 +167,7 @@ const decrire = (c: Case | undefined, parId: Record<string, { titre: string }>):
   if (c.type === 'dehors') return 'Repas dehors';
   if (c.type === 'note') return c.texte;
   const r = parId[c.recetteId];
-  const autres = (c.pour ?? []).filter(p => parId[p.recetteId]).map(p => `, pour ${p.personne} : ${parId[p.recetteId].titre}`).join('');
+  const autres = (c.pour ?? []).filter(p => parId[p.recetteId]).map(p => `, ${nomPlatPour(p).toLowerCase()} : ${parId[p.recetteId].titre}`).join('');
   return (r ? (c.type === 'restes' ? `Restes : ${r.titre}` : r.titre) : 'Recette supprimée') + autres;
 };
 
@@ -180,7 +181,7 @@ function CaseRepas({ date, moment, c, cible, onToucher, onLong, onVider }: Props
   return (
     <div className={'case' + (cible ? ' cible' : '')}>
       <button className={'case-titre' + (c ? '' : ' vide') + (c?.mange ? ' mange' : '')} {...appui} aria-label={`${MOMENT_LABEL[moment]}, ${dateLongue(date)} : ${texte}`}>
-        {c ? <>{c.mange ? `✓ ${principal}` : principal}{autres.map(p => <span key={p.personne} className="case-pour"><br />{p.personne} : {p.r.titre}</span>)}</> : '+ Choisir'}
+        {c ? <>{c.mange ? `✓ ${principal}` : principal}{autres.map(p => <span key={p.personne} className="case-pour"><br />{p.personne ? p.personne + ' : ' : '+ '}{p.r.titre}</span>)}</> : '+ Choisir'}
       </button>
       {c && (
         <div className="case-pied">
@@ -219,9 +220,9 @@ function LigneRepas({ date, moment, c, cible, onToucher, onLong, onVider, onPour
       {autres.map(p => (
         <div key={p.personne} className="ligne-pour">
           <button className="lien-pour" onClick={() => aller(`/recette/${p.recetteId}?portions=${p.portions}`)}>
-            <span className="doux">Pour {p.personne} :</span> {p.r.titre} <span className="doux petit">· {p.portions} p.</span>
+            <span className="doux">{nomPlatPour(p)} :</span> {p.r.titre} <span className="doux petit">· {p.portions} p.</span>
           </button>
-          {!cible && <button className="corbeille" aria-label={`Retirer le plat de ${p.personne}`} onClick={() => onRetirerPour(p.personne)}>{Icone.corbeille}</button>}
+          {!cible && <button className="corbeille" aria-label={p.personne ? `Retirer le plat de ${p.personne}` : 'Retirer le deuxième plat'} onClick={() => onRetirerPour(p.personne)}>{Icone.corbeille}</button>}
         </div>
       ))}
       {manque.map(([p, mots]) => (
@@ -230,6 +231,9 @@ function LigneRepas({ date, moment, c, cible, onToucher, onLong, onVider, onPour
           <button className="lien" onClick={() => onPour(p)}>Un plat pour {p}</button>
         </div>
       ))}
+      {!cible && c?.type === 'recette' && parId[c.recetteId] && !c.pour?.some(p => !p.personne) && (
+        <div className="ligne-pour"><span /><button className="lien" onClick={() => onPour('')}>+ Un deuxième plat</button></div>
+      )}
     </div>
   );
 }
@@ -267,6 +271,13 @@ function MenuCase({ pos, onFermer, onMode, onPour, onRetirerPour }: {
           <button className="action" onClick={() => onRetirerPour(p)}>Retirer le plat de {p}</button>
         </div> : <button key={p} className="action" onClick={() => onPour(p)}>Un autre plat pour {p}</button>;
       })}
+      {c.type === 'recette' && (() => {
+        const a = c.pour?.find(x => !x.personne);
+        return a ? <>
+          <button className="action" onClick={() => onPour('')}>Changer le deuxième plat{parId[a.recetteId] ? ` (${parId[a.recetteId].titre})` : ''}</button>
+          <button className="action" onClick={() => onRetirerPour('')}>Retirer le deuxième plat</button>
+        </> : <button className="action" onClick={() => onPour('')}>Ajouter un deuxième plat</button>;
+      })()}
       {'portions' in c && (
         <div className="action" style={{ justifyContent: 'space-between' }}>
           <span>Portions</span>

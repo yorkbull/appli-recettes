@@ -32,7 +32,8 @@ export default function Recettes() {
   }, [recettes, q, filtres, reglages.thematiques, avecMaison, frigo]);
 
   const ajouterExemples = async () => {
-    for (const e of EXEMPLES()) await enregistrerRecette(e);
+    // toutes en même temps : quelques millisecondes, même si l'appli est fermée juste après
+    await Promise.all(EXEMPLES().map(e => enregistrerRecette(e)));
     toast('5 recettes d’exemple ajoutées');
   };
 

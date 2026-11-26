@@ -239,3 +239,10 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 /* Conseil de puissance pour les plaques à induction */
 .conseil-induction { display: block; margin-top: 4px; font-size: .85rem; color: var(--texte-doux); }
 .cuisine-etape p.conseil-induction { font-size: 1rem; margin-top: -8px; }
+
+/* Texte saisi sans espace (lien collé, « aaaaaa… ») : il passe à la ligne au lieu d'élargir l'écran */
+.page, .feuille, .cuisine { overflow-wrap: anywhere; }
+.annotation > div, .ligne-reglage > span, .article-nom, .ligne-recette > span { min-width: 0; }
+.pastille { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Le message du bas ne bloque jamais un bouton placé dessous (ex. « Enregistrer ») */
+.toast { pointer-events: none; }

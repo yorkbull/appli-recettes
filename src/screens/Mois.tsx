@@ -22,7 +22,7 @@ export default function Mois() {
     if (c.type === 'dehors') return 'Repas dehors';
     if (c.type === 'note') return c.texte;
     const r = parId[c.recetteId];
-    const autres = (c.pour ?? []).filter(p => parId[p.recetteId]).map(p => ` · ${p.personne} : ${parId[p.recetteId].titre}`).join('');
+    const autres = (c.pour ?? []).filter(p => parId[p.recetteId]).map(p => ` · ${p.personne ? p.personne + ' : ' : '+ '}${parId[p.recetteId].titre}`).join('');
     return (r ? (c.type === 'restes' ? 'Restes : ' : '') + r.titre : 'Recette supprimée') + autres;
   };
 
