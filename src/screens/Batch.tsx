@@ -88,9 +88,9 @@ export default function Batch() {
         <section className="carte">
           <h2>Plan de cuisine</h2>
           <p className="doux petit" style={{ marginTop: 0 }}>Dans cet ordre, les cuissons longues tournent pendant que vous préparez le reste. Cochez au fur et à mesure.</p>
-          {phases.map(({ ph, taches }) => (
+          {phases.map(({ ph, taches }, rang) => (
             <div key={ph}>
-              <h3 style={{ margin: '14px 0 4px' }}>{ph}. {TITRES_PHASES[ph]}</h3>
+              <h3 style={{ margin: '14px 0 4px' }}>{rang + 1}. {TITRES_PHASES[ph]}</h3>
               {taches.map(t => <Etape key={t.id} t={t} faite={faites.includes(t.id)} onBasculer={() => basculer(t.id)} />)}
             </div>
           ))}
